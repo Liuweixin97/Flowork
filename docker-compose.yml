@@ -1,0 +1,47 @@
+services:
+  resume-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=sqlite:///data/resume_editor.db
+      - HOST=0.0.0.0
+      - PORT=8080
+    volumes:
+      - resume_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - resume_network
+      - dify_default  # 连接到Dify的网络
+
+  resume-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    depends_on:
+      - resume-backend
+    restart: unless-stopped
+    networks:
+      - resume_network
+
+volumes:
+  resume_data:
+    driver: local
+
+networks:
+  resume_network:
+    driver: bridge
+  dify_default:
+    external: true  # 使用Dify的外部网络
