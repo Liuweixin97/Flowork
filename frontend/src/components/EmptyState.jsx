@@ -17,13 +17,13 @@ const EmptyState = ({ onCreateNew, onAICreate, createLoading = false }) => {
       </p>
       
       <div className="space-y-4 max-w-sm mx-auto">
-        {/* AI创建简历按钮 */}
+        {/* 浩流简历·flowork创建简历按钮 */}
         <button
           onClick={onAICreate}
           className="w-full flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
         >
           <Bot className="h-5 w-5" />
-          <span>AI智能创建简历</span>
+          <span>浩流简历·flowork智能创建</span>
         </button>
         
         {/* 新建空白简历按钮 */}

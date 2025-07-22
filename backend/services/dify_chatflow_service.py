@@ -10,21 +10,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DifyChatflowService:
-    """Dify Chatflow 集成服务"""
+    """浩流简历·flowork Dify 集成服务"""
     
     def __init__(self):
-        # Dify API配置
-        self.dify_api_base = os.getenv('DIFY_API_BASE', 'http://localhost:8001/v1')
+        # Dify API配置 - 使用正确的对话型应用API
+        self.dify_api_base = os.getenv('DIFY_API_BASE', 'http://localhost/v1')
         self.dify_api_key = os.getenv('DIFY_API_KEY', '')
-        self.app_id = os.getenv('DIFY_APP_ID', '')
-        self.workflow_id = os.getenv('DIFY_WORKFLOW_ID', '')  # 浩流简历·flowork 工作流ID
         
         # 会话管理
         self.active_sessions = {}  # conversation_id -> session_info
         
     def start_conversation(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        启动与Dify Chatflow的对话
+        启动与浩流简历·flowork的对话
         
         Args:
             user_id: 用户ID（可选）
@@ -33,11 +31,13 @@ class DifyChatflowService:
             包含会话ID和初始消息的字典
         """
         try:
-            conversation_id = str(uuid.uuid4())
+            # 生成本地会话ID用于跟踪
+            local_session_id = str(uuid.uuid4())
             
             # 创建会话记录
             session_info = {
-                'conversation_id': conversation_id,
+                'local_session_id': local_session_id,
+                'dify_conversation_id': None,  # 将在首次API调用后获得
                 'user_id': user_id,
                 'created_at': datetime.utcnow(),
                 'status': 'active',
@@ -46,39 +46,43 @@ class DifyChatflowService:
                 'last_activity': datetime.utcnow()
             }
             
-            self.active_sessions[conversation_id] = session_info
+            self.active_sessions[local_session_id] = session_info
             
-            # 发送初始消息启动工作流
+            # 发送初始消息启动浩流简历·flowork对话
             initial_response = self._send_message_to_workflow(
-                conversation_id=conversation_id,
-                message="开始创建简历",
+                conversation_id=local_session_id,
+                message="你好，我想创建一份个人简历",
                 inputs={}
             )
             
+            # 更新会话信息中的Dify对话ID
+            if initial_response.get('conversation_id'):
+                session_info['dify_conversation_id'] = initial_response.get('conversation_id')
+            
             return {
                 'success': True,
-                'conversation_id': conversation_id,
-                'initial_message': initial_response.get('answer', '您好！我是AI简历助手，我将引导您一步步创建个人简历。让我们开始吧！'),
+                'conversation_id': local_session_id,
+                'initial_message': initial_response.get('answer', '您好！我是浩流简历·flowork助手，我将引导您一步步创建个人简历。让我们开始吧！'),
                 'status': 'started'
             }
             
         except Exception as e:
             return {
                 'success': False,
-                'error': f'启动对话失败: {str(e)}'
+                'error': f'启动浩流简历·flowork对话失败: {str(e)}'
             }
     
     def send_message(self, conversation_id: str, message: str, inputs: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        发送消息到Dify Chatflow
+        发送消息到浩流简历·flowork
         
         Args:
-            conversation_id: 会话ID
+            conversation_id: 本地会话ID
             message: 用户消息
             inputs: 额外的输入参数
             
         Returns:
-            Dify的响应结果
+            浩流简历·flowork的响应结果
         """
         try:
             if conversation_id not in self.active_sessions:
@@ -90,12 +94,16 @@ class DifyChatflowService:
             session = self.active_sessions[conversation_id]
             session['last_activity'] = datetime.utcnow()
             
-            # 发送消息到Dify工作流
+            # 发送消息到浩流简历·flowork
             response = self._send_message_to_workflow(
                 conversation_id=conversation_id,
                 message=message,
                 inputs=inputs or {}
             )
+            
+            # 更新Dify对话ID（如果有变化）
+            if response.get('conversation_id') and response.get('conversation_id') != session.get('dify_conversation_id'):
+                session['dify_conversation_id'] = response.get('conversation_id')
             
             # 记录消息历史
             session['messages'].append({
@@ -108,7 +116,8 @@ class DifyChatflowService:
                 'type': 'assistant',
                 'content': response.get('answer', ''),
                 'timestamp': datetime.utcnow(),
-                'metadata': response.get('metadata', {})
+                'metadata': response.get('metadata', {}),
+                'message_id': response.get('message_id')
             })
             
             # 检查是否完成简历创建
@@ -182,7 +191,7 @@ class DifyChatflowService:
     
     def _send_message_to_workflow(self, conversation_id: str, message: str, inputs: Dict) -> Dict[str, Any]:
         """
-        发送消息到Dify工作流
+        发送消息到浩流简历·flowork Dify 对话应用
         
         Args:
             conversation_id: 会话ID
@@ -193,61 +202,77 @@ class DifyChatflowService:
             Dify API响应
         """
         try:
-            # Dify工作流API端点
-            url = f"{self.dify_api_base}/workflows/run"
+            # 使用正确的Dify对话型应用API端点
+            url = f"{self.dify_api_base}/chat-messages"
             
             headers = {
                 'Authorization': f'Bearer {self.dify_api_key}',
                 'Content-Type': 'application/json'
             }
             
+            # 获取实际的Dify对话ID
+            session = self.active_sessions.get(conversation_id, {})
+            dify_conversation_id = session.get('dify_conversation_id', '')
+            
+            # 构建符合Dify chat-messages API的请求格式
             payload = {
-                'inputs': {
-                    'user_message': message,
-                    'conversation_id': conversation_id,
-                    **inputs
-                },
-                'response_mode': 'blocking',  # 同步模式
-                'user': conversation_id,  # 使用conversation_id作为用户标识
-                'workflow_id': self.workflow_id
+                'inputs': inputs,  # 应用定义的输入变量
+                'query': message,  # 用户输入/提问内容
+                'response_mode': 'blocking',  # 阻塞模式，等待完整响应
+                'user': f'user-{conversation_id}',  # 用户标识，使用本地会话ID区分
+                'conversation_id': dify_conversation_id,  # Dify对话ID，首次为空
+                'auto_generate_name': True  # 自动生成对话标题
             }
             
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
             response.raise_for_status()
             
             result = response.json()
             
-            # 处理Dify响应格式
-            if result.get('code') == 200 or 'data' in result:
-                data = result.get('data', result)
+            # 处理Dify chat-messages API响应格式
+            if result.get('event') == 'message':
+                # 更新会话ID（如果是新会话）
+                if conversation_id not in self.active_sessions and result.get('conversation_id'):
+                    conversation_id = result.get('conversation_id')
+                
                 return {
-                    'answer': data.get('outputs', {}).get('answer', data.get('answer', '')),
-                    'metadata': data.get('metadata', {}),
-                    'suggestions': data.get('outputs', {}).get('suggestions', [])
+                    'answer': result.get('answer', ''),
+                    'conversation_id': result.get('conversation_id', conversation_id),
+                    'message_id': result.get('message_id'),
+                    'metadata': result.get('metadata', {}),
+                    'suggestions': []  # 可以从其他API获取建议问题
                 }
             else:
-                raise Exception(f"Dify API错误: {result.get('message', '未知错误')}")
+                raise Exception(f"Dify API响应格式错误: {result}")
                 
         except requests.exceptions.RequestException as e:
             raise Exception(f"网络请求失败: {str(e)}")
         except Exception as e:
-            raise Exception(f"调用Dify API失败: {str(e)}")
+            raise Exception(f"调用浩流简历·flowork失败: {str(e)}")
     
     def _is_resume_complete(self, response: Dict) -> bool:
-        """检查简历是否创建完成"""
+        """检查浩流简历·flowork是否创建完成"""
         # 检查响应中是否包含完成标识
         answer = response.get('answer', '').lower()
         metadata = response.get('metadata', {})
         
         # 检查完成标识关键词
         completion_keywords = [
-            '简历创建完成', '简历已生成', '简历制作完成',
-            'resume complete', 'resume generated', '创建完毕'
+            '简历创建完成', '简历已生成', '简历制作完成', '简历生成完毕',
+            'resume complete', 'resume generated', '创建完毕', '已完成',
+            '浩流简历', '简历内容如下', '您的简历已经准备好了'
         ]
         
         for keyword in completion_keywords:
-            if keyword in answer:
+            if keyword.lower() in answer:
                 return True
+        
+        # 检查是否包含markdown格式的简历内容
+        if ('# ' in response.get('answer', '') and 
+            ('## 个人信息' in response.get('answer', '') or 
+             '## 工作经历' in response.get('answer', '') or
+             '## 教育背景' in response.get('answer', ''))):
+            return True
         
         # 检查metadata中的完成标识
         if metadata.get('status') == 'completed' or metadata.get('resume_ready'):
@@ -256,38 +281,53 @@ class DifyChatflowService:
         return False
     
     def _extract_resume_content(self, response: Dict) -> Optional[Dict]:
-        """从响应中提取简历内容"""
+        """从浩流简历·flowork响应中提取简历内容"""
         try:
-            # 尝试从不同字段提取简历内容
-            metadata = response.get('metadata', {})
+            # 方式1: 直接从answer中提取简历markdown
+            answer = response.get('answer', '')
+            if answer and ('# ' in answer or '## ' in answer):  # 包含markdown标题
+                # 提取姓名作为简历标题
+                title = '浩流简历·flowork生成的简历'
+                lines = answer.split('\n')
+                for line in lines:
+                    if line.startswith('# ') and line.strip() != '# ':
+                        title = line.replace('# ', '').strip() + ' - 浩流简历·flowork'
+                        break
+                
+                return {
+                    'markdown': answer,
+                    'title': title
+                }
             
-            # 方式1: 从metadata中提取
+            # 方式2: 从metadata中提取
+            metadata = response.get('metadata', {})
             if 'resume_content' in metadata:
                 return {
                     'markdown': metadata['resume_content'],
-                    'title': metadata.get('resume_title', 'AI生成的简历')
+                    'title': metadata.get('resume_title', '浩流简历·flowork生成的简历')
                 }
             
-            # 方式2: 从answer中解析markdown格式
-            answer = response.get('answer', '')
-            if '# ' in answer or '## ' in answer:  # 包含markdown标题
-                return {
-                    'markdown': answer,
-                    'title': 'AI生成的简历'
-                }
+            # 方式3: 检查retriever_resources（如果Dify返回结构化数据）
+            if metadata.get('retriever_resources'):
+                resources = metadata.get('retriever_resources', [])
+                for resource in resources:
+                    if 'resume' in resource.get('content', '').lower():
+                        return {
+                            'markdown': resource.get('content', ''),
+                            'title': '浩流简历·flowork生成的简历'
+                        }
             
-            # 方式3: 检查outputs
-            outputs = response.get('outputs', {})
-            if 'resume_markdown' in outputs:
+            # 如果answer包含简历相关信息但不是标准markdown，尝试包装
+            if answer and any(keyword in answer.lower() for keyword in ['姓名', '电话', '邮箱', '工作经历', '教育背景']):
                 return {
-                    'markdown': outputs['resume_markdown'],
-                    'title': outputs.get('resume_title', 'AI生成的简历')
+                    'markdown': f"# 个人简历\n\n{answer}",
+                    'title': '浩流简历·flowork生成的简历'
                 }
             
             return None
             
         except Exception as e:
-            print(f"提取简历内容失败: {str(e)}")
+            print(f"提取浩流简历内容失败: {str(e)}")
             return None
     
     def cleanup_expired_sessions(self, max_age_minutes: int = 30):

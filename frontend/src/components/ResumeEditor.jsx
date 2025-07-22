@@ -165,7 +165,7 @@ const ResumeEditor = () => {
       // 如果有简历内容，更新当前编辑器
       if (generatedResume.content) {
         const newMarkdown = generatedResume.content.markdown || generatedResume.content;
-        const newTitle = generatedResume.content.title || 'AI生成的简历';
+        const newTitle = generatedResume.content.title || '浩流简历·flowork生成的简历';
         
         setMarkdown(newMarkdown);
         setTitle(newTitle);
@@ -241,7 +241,7 @@ const ResumeEditor = () => {
               className="flex items-center space-x-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
             >
               <Bot className="h-4 w-4" />
-              <span>AI助手</span>
+              <span>浩流简历·flowork</span>
             </button>
             
             <button

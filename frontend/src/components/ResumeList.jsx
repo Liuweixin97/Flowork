@@ -218,7 +218,7 @@ const ResumeList = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">我的简历</h2>
-            <p className="text-gray-600 mt-1">管理您的简历和使用AI助手创建</p>
+            <p className="text-gray-600 mt-1">管理您的简历和使用浩流简历·flowork创建</p>
           </div>
           <div className="flex space-x-3">
             <button
@@ -226,7 +226,7 @@ const ResumeList = () => {
               className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
             >
               <Bot className="h-4 w-4 mr-2" />
-              AI创建简历
+              浩流简历·flowork
             </button>
             <button
               onClick={handleCreateNewResume}

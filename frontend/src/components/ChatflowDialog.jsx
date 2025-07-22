@@ -57,7 +57,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
         };
         
         setMessages([initialMsg]);
-        toast.success('AI简历助手已启动');
+        toast.success('浩流简历·flowork已启动');
         
         // 聚焦输入框
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -67,7 +67,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
     } catch (error) {
       console.error('启动对话失败:', error);
       setConversationStatus('error');
-      toast.error('启动AI助手失败，请重试');
+      toast.error('启动浩流简历·flowork失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -224,7 +224,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center space-x-2">
             <MessageCircle className="h-5 w-5 text-green-500" />
-            <h3 className="text-lg font-semibold">AI简历助手</h3>
+            <h3 className="text-lg font-semibold">浩流简历·flowork</h3>
             <span className={`px-2 py-1 text-xs rounded-full ${
               conversationStatus === 'active' 
                 ? 'bg-green-100 text-green-800' 
@@ -254,9 +254,9 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           {conversationStatus === 'inactive' && (
             <div className="text-center py-12">
               <Bot className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h4 className="text-lg font-medium text-gray-700 mb-2">AI简历助手</h4>
+              <h4 className="text-lg font-medium text-gray-700 mb-2">浩流简历·flowork</h4>
               <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                我将引导您一步步创建个人简历，包括基本信息、工作经历、教育背景、技能专长等内容。
+                我是浩流简历·flowork智能助手，将引导您一步步创建个人简历，包括基本信息、工作经历、教育背景、技能专长等内容。
               </p>
               <button
                 onClick={startConversation}
@@ -281,7 +281,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
             <div className="flex justify-start">
               <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-4 py-2">
                 <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                <span className="text-gray-600">AI正在思考...</span>
+                <span className="text-gray-600">浩流简历·flowork正在思考...</span>
               </div>
             </div>
           )}
