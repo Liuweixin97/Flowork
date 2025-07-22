@@ -204,11 +204,19 @@ const ResumeList = () => {
   
   if (resumes.length === 0) {
     return (
-      <EmptyState 
-        onCreateNew={handleCreateNewResume} 
-        onAICreate={() => setShowChatflowDialog(true)}
-        createLoading={createLoading} 
-      />
+      <>
+        <EmptyState 
+          onCreateNew={handleCreateNewResume} 
+          onAICreate={() => setShowChatflowDialog(true)}
+          createLoading={createLoading} 
+        />
+        {/* 确保即使在空状态下也能显示ChatflowDialog */}
+        <ChatflowDialog 
+          isOpen={showChatflowDialog}
+          onClose={() => setShowChatflowDialog(false)}
+          onResumeGenerated={handleResumeGenerated}
+        />
+      </>
     );
   }
   

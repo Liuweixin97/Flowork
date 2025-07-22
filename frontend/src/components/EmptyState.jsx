@@ -19,8 +19,16 @@ const EmptyState = ({ onCreateNew, onAICreate, createLoading = false }) => {
       <div className="space-y-4 max-w-sm mx-auto">
         {/* 浩流简历·flowork创建简历按钮 */}
         <button
-          onClick={onAICreate}
-          className="w-full flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
+          onClick={(e) => {
+            console.log('浩流简历·flowork按钮被点击', onAICreate);
+            if (onAICreate) {
+              onAICreate(e);
+            } else {
+              console.error('onAICreate函数未定义');
+            }
+          }}
+          disabled={!onAICreate}
+          className="w-full flex items-center justify-center space-x-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors duration-200"
         >
           <Bot className="h-5 w-5" />
           <span>浩流简历·flowork智能创建</span>
@@ -64,19 +72,56 @@ const EmptyState = ({ onCreateNew, onAICreate, createLoading = false }) => {
       </div>
       
       {/* 配置信息 */}
-      <div className="mt-12 bg-gray-50 border border-gray-200 rounded-lg p-6 max-w-2xl mx-auto">
-        <h4 className="font-medium text-gray-900 mb-3">Dify HTTP节点配置</h4>
-        <div className="text-sm text-gray-700 space-y-2 text-left">
-          <div><strong>方法:</strong> POST</div>
-          <div><strong>URL:</strong> <code className="bg-gray-200 px-2 py-1 rounded">http://host.docker.internal:8080/api/resumes/from-dify</code></div>
-          <div><strong>请求头:</strong> <code className="bg-gray-200 px-2 py-1 rounded">Content-Type: application/json</code></div>
-          <div><strong>请求体:</strong></div>
-          <pre className="bg-gray-200 p-3 rounded text-xs overflow-x-auto">
+      <div className="mt-12 bg-gray-50 border border-gray-200 rounded-lg p-6 max-w-4xl mx-auto">
+        <h4 className="font-medium text-gray-900 mb-4">浩流简历·flowork HTTP节点配置</h4>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* 标准配置 */}
+          <div className="space-y-3">
+            <h5 className="font-medium text-gray-800">标准配置（返回JSON）</h5>
+            <div className="text-sm text-gray-700 space-y-2">
+              <div><strong>方法:</strong> POST</div>
+              <div><strong>URL:</strong> <code className="bg-gray-200 px-2 py-1 rounded text-xs">http://host.docker.internal:8080/api/resumes/from-dify</code></div>
+              <div><strong>请求头:</strong> <code className="bg-gray-200 px-2 py-1 rounded">Content-Type: application/json</code></div>
+              <div><strong>请求体:</strong></div>
+              <pre className="bg-gray-200 p-3 rounded text-xs overflow-x-auto">
 {`{
   "resume_markdown": "{{LLM生成的简历内容}}",
   "title": "{{简历标题}}"
 }`}
-          </pre>
+              </pre>
+            </div>
+          </div>
+
+          {/* 自动跳转配置 */}
+          <div className="space-y-3">
+            <h5 className="font-medium text-gray-800">自动跳转配置（推荐）</h5>
+            <div className="text-sm text-gray-700 space-y-3">
+              <div>
+                <strong>方式1 - 查询参数：</strong>
+                <code className="block bg-gray-200 px-2 py-1 rounded text-xs mt-1">
+                  http://host.docker.internal:8080/api/resumes/from-dify?auto_redirect=true
+                </code>
+              </div>
+              
+              <div>
+                <strong>方式2 - 请求体参数：</strong>
+                <pre className="bg-gray-200 p-3 rounded text-xs overflow-x-auto mt-1">
+{`{
+  "resume_markdown": "{{LLM生成的简历内容}}",
+  "title": "{{简历标题}}",
+  "auto_redirect": true
+}`}
+                </pre>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 mt-3">
+                <p className="text-xs text-blue-800">
+                  💡 使用自动跳转后，用户将直接转到简历编辑页面，无需手动查找
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

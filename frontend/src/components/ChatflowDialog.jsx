@@ -74,7 +74,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
     }
   };
   
-  // 发送消息
+  // 发送消息 - 使用流式API
   const sendMessage = async () => {
     if (!inputMessage.trim() || !conversationId || isLoading) return;
     
@@ -90,46 +90,90 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
     setInputMessage('');
     setIsLoading(true);
     
+    // 创建流式助手消息
+    const streamingMessageId = Date.now() + 1;
+    const streamingMessage = {
+      id: streamingMessageId,
+      type: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      suggestions: [],
+      isStreaming: true
+    };
+    
+    setMessages(prev => [...prev, streamingMessage]);
+    
     try {
-      const response = await chatflowAPI.sendMessage(conversationId, currentMessage);
-      
-      if (response.data.success) {
-        const assistantMessage = {
-          id: Date.now() + 1,
-          type: 'assistant',
-          content: response.data.message,
-          timestamp: new Date(),
-          suggestions: response.data.suggestions || []
-        };
-        
-        setMessages(prev => [...prev, assistantMessage]);
-        
-        // 检查是否完成简历生成
-        if (response.data.status === 'completed' && response.data.resume_content) {
-          setConversationStatus('completed');
-          setGeneratedResume({
-            content: response.data.resume_content,
-            resumeId: response.data.resume_id,
-            editUrl: response.data.edit_url
-          });
+      await chatflowAPI.sendStreamMessage(
+        conversationId, 
+        currentMessage,
+        {},
+        // onChunk: 处理流式内容块
+        (chunk) => {
+          setMessages(prev => prev.map(msg => 
+            msg.id === streamingMessageId 
+              ? { ...msg, content: msg.content + chunk }
+              : msg
+          ));
+        },
+        // onComplete: 处理完成事件
+        (data) => {
+          setMessages(prev => prev.map(msg => 
+            msg.id === streamingMessageId 
+              ? { ...msg, isStreaming: false }
+              : msg
+          ));
           
-          toast.success('简历生成完成！');
+          // 检查是否完成简历生成
+          if (data.status === 'completed' && data.resume_content) {
+            setConversationStatus('completed');
+            setGeneratedResume({
+              content: data.resume_content,
+              resumeId: data.resume_id,
+              editUrl: data.edit_url
+            });
+            
+            toast.success('简历生成完成！');
+          }
+          
+          setIsLoading(false);
+        },
+        // onError: 处理错误
+        (error) => {
+          console.error('流式消息发送失败:', error);
+          
+          // 移除流式消息并添加错误消息
+          setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
+          
+          const errorMessage = {
+            id: Date.now() + 2,
+            type: 'system',
+            content: '抱歉，消息发送失败，请重试。',
+            timestamp: new Date(),
+            isError: true
+          };
+          
+          setMessages(prev => [...prev, errorMessage]);
+          toast.error('消息发送失败');
+          setIsLoading(false);
         }
-      } else {
-        throw new Error(response.data.error || '发送消息失败');
-      }
+      );
     } catch (error) {
-      console.error('发送消息失败:', error);
+      console.error('发送流式消息失败:', error);
+      
+      // 移除流式消息并添加错误消息
+      setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
+      
       const errorMessage = {
-        id: Date.now() + 1,
+        id: Date.now() + 2,
         type: 'system',
         content: '抱歉，消息发送失败，请重试。',
         timestamp: new Date(),
         isError: true
       };
+      
       setMessages(prev => [...prev, errorMessage]);
       toast.error('消息发送失败');
-    } finally {
       setIsLoading(false);
     }
   };
