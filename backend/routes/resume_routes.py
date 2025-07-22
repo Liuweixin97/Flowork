@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, send_file
 from models import db, Resume
 from services.markdown_parser import ResumeMarkdownParser
 from services.pdf_generator import ResumePDFGenerator
+from routes.notification_routes import NotificationService
 import io
 import os
 from datetime import datetime
@@ -60,27 +61,40 @@ def receive_from_dify():
         db.session.add(resume)
         db.session.commit()
         
-        # 检查是否需要自动跳转到编辑页面
-        # 方式1: 通过查询参数 auto_redirect=true 明确指定
-        auto_redirect = request.args.get('auto_redirect', '').lower() == 'true'
+        # 构建前端编辑页面URL
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
+        edit_url = f"/edit/{resume.id}"
+        full_redirect_url = f"{frontend_url}{edit_url}"
         
-        # 方式2: 通过请求体参数指定
+        # 🔥 发送实时通知给前端，触发自动跳转
+        try:
+            NotificationService.broadcast_resume_created(
+                resume_id=resume.id,
+                title=resume.title,
+                redirect_url=full_redirect_url
+            )
+            print(f"[NOTIFICATION] 简历创建通知已发送: {resume.title} -> {full_redirect_url}")
+        except Exception as notify_error:
+            print(f"[NOTIFICATION] 发送通知失败: {notify_error}")
+        
+        # 检查是否需要HTTP重定向（兼容旧的重定向方式）
+        auto_redirect = request.args.get('auto_redirect', '').lower() == 'true'
         if not auto_redirect and isinstance(data, dict):
             auto_redirect = data.get('auto_redirect', False)
         
         if auto_redirect:
-            # 需要重定向：返回302重定向到编辑页面
+            # HTTP重定向：返回302重定向
             from flask import redirect
-            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
-            return redirect(f"{frontend_url}/edit/{resume.id}", code=302)
+            return redirect(full_redirect_url, code=302)
         else:
-            # 标准API响应：返回JSON
+            # 标准API响应：返回JSON + 实时通知已发送
             return jsonify({
                 'success': True,
-                'message': '简历接收成功',
+                'message': '简历接收成功，实时通知已发送',
                 'resume_id': resume.id,
-                'edit_url': f'/edit/{resume.id}',
-                'redirect_url': f"{os.getenv('FRONTEND_URL', 'http://localhost:3002')}/edit/{resume.id}"
+                'edit_url': edit_url,
+                'redirect_url': full_redirect_url,
+                'notification_sent': True
             }), 201
         
     except Exception as e:

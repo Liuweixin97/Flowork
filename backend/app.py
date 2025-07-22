@@ -4,6 +4,7 @@ from models import db
 from routes.resume_routes import resume_bp
 from routes.debug_routes import debug_bp
 from routes.chatflow_routes import chatflow_bp
+from routes.notification_routes import notification_bp
 import os
 from dotenv import load_dotenv
 
@@ -22,12 +23,16 @@ def create_app():
     # 启用CORS，允许前端和Docker容器访问
     CORS(app, origins=[
         'http://localhost:3000', 
+        'http://localhost:3001',
+        'http://localhost:3002',
         'http://localhost:5173',
         'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001', 
+        'http://127.0.0.1:3002',
         'http://127.0.0.1:5173'
     ], 
     supports_credentials=True,
-    allow_headers=['Content-Type', 'Authorization'],
+    allow_headers=['Content-Type', 'Authorization', 'X-Client-ID'],
     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     
     # 初始化数据库
@@ -37,6 +42,7 @@ def create_app():
     app.register_blueprint(resume_bp)
     app.register_blueprint(debug_bp)
     app.register_blueprint(chatflow_bp)
+    app.register_blueprint(notification_bp)
     
     # 创建数据库表
     with app.app_context():
@@ -73,9 +79,12 @@ def create_app():
                 'preview': '/api/resumes/<id>/preview',
                 'chatflow_start': '/api/chatflow/start',
                 'chatflow_message': '/api/chatflow/message',
+                'chatflow_stream': '/api/chatflow/stream',
                 'chatflow_history': '/api/chatflow/history/<conversation_id>',
                 'chatflow_end': '/api/chatflow/end',
-                'chatflow_status': '/api/chatflow/status'
+                'chatflow_status': '/api/chatflow/status',
+                'notification_events': '/api/notifications/events',
+                'notification_test': '/api/notifications/test'
             }
         })
     
