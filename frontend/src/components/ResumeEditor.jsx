@@ -335,8 +335,8 @@ const ResumeEditor = () => {
               <h3 className="text-sm font-medium text-gray-700">实时预览</h3>
             </div>
             <div className="p-6 overflow-auto" style={{ maxHeight: '600px' }}>
-              <div className="markdown-preview">
-                <ReactMarkdown>{markdown || '预览区域将显示Markdown渲染后的内容...'}</ReactMarkdown>
+              <div className="markdown-content">
+                <ReactMarkdown>{markdown || '预览区域将显示浩流简历·flowork渲染后的内容...'}</ReactMarkdown>
               </div>
             </div>
           </div>

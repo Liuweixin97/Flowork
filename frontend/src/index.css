@@ -28,6 +28,84 @@
   .textarea-field {
     @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none;
   }
+
+  /* 浩流简历·flowork Markdown 样式 */
+  .markdown-content {
+    @apply text-sm leading-relaxed;
+  }
+
+  .markdown-content h1 {
+    @apply text-xl font-bold mb-3 text-gray-900 border-b border-gray-200 pb-2;
+  }
+
+  .markdown-content h2 {
+    @apply text-lg font-semibold mb-2 text-gray-800 mt-4;
+  }
+
+  .markdown-content h3 {
+    @apply text-base font-medium mb-2 text-gray-700 mt-3;
+  }
+
+  .markdown-content p {
+    @apply mb-2 leading-relaxed text-gray-700;
+  }
+
+  .markdown-content ul {
+    @apply list-disc list-inside mb-3 space-y-1 ml-2;
+  }
+
+  .markdown-content ol {
+    @apply list-decimal list-inside mb-3 space-y-1 ml-2;
+  }
+
+  .markdown-content li {
+    @apply text-gray-700 leading-relaxed;
+  }
+
+  .markdown-content strong {
+    @apply font-semibold text-gray-900;
+  }
+
+  .markdown-content em {
+    @apply italic text-gray-700;
+  }
+
+  .markdown-content code {
+    @apply bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800;
+  }
+
+  .markdown-content pre {
+    @apply bg-gray-100 p-3 rounded-lg overflow-x-auto text-sm mb-3;
+  }
+
+  .markdown-content pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-blue-300 pl-4 italic text-gray-600 mb-3 bg-blue-50 py-2;
+  }
+
+  .markdown-content a {
+    @apply text-blue-600 hover:text-blue-800 hover:underline;
+  }
+
+  .markdown-content table {
+    @apply w-full border-collapse border border-gray-300 mb-3 text-sm;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply border border-gray-300 px-3 py-2 text-left;
+  }
+
+  .markdown-content th {
+    @apply bg-gray-50 font-semibold;
+  }
+
+  .markdown-content hr {
+    @apply border-0 border-t border-gray-300 my-4;
+  }
 }
 
 /* 自定义滚动条 */

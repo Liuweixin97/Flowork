@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageCircle, User, Bot, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Send, MessageCircle, User, Bot, Loader2, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { chatflowAPI } from '../utils/api';
 import toast from 'react-hot-toast';
 
@@ -161,14 +162,67 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
     onClose();
   };
   
+  // 检测消息是否包含 Markdown 格式
+  const hasMarkdown = (content) => {
+    return content && (
+      content.includes('# ') || 
+      content.includes('## ') ||
+      content.includes('### ') ||
+      content.includes('- ') ||
+      content.includes('* ') ||
+      content.includes('**') ||
+      content.includes('`') ||
+      content.includes('[') ||
+      content.includes('\n\n')
+    );
+  };
+
+  // 检测消息是否包含简历内容
+  const hasResumeContent = (content) => {
+    return content && (
+      content.includes('# ') && (
+        content.includes('个人信息') ||
+        content.includes('工作经历') ||
+        content.includes('教育背景') ||
+        content.includes('技能') ||
+        content.includes('项目经验')
+      )
+    );
+  };
+
+  // 复制内容到剪贴板
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  
+  const copyToClipboard = async (content, messageId) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      toast.success('已复制到剪贴板');
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (error) {
+      toast.error('复制失败');
+    }
+  };
+
+  // 自定义 Markdown 组件样式（使用统一的 CSS 类）
+  const MarkdownComponents = {
+    // 为链接添加安全属性
+    a: ({children, href}) => (
+      <a href={href} className="text-blue-600 hover:text-blue-800 hover:underline" target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ),
+  };
+
   // 消息组件
   const MessageBubble = ({ message }) => {
     const isUser = message.type === 'user';
     const isSystem = message.type === 'system';
+    const shouldRenderMarkdown = !isUser && hasMarkdown(message.content);
     
     return (
       <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-        <div className={`flex items-start space-x-2 max-w-[80%] ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
+        <div className={`flex items-start space-x-2 max-w-[85%] ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
             isUser 
               ? 'bg-blue-500 text-white' 
@@ -179,14 +233,36 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
             {isUser ? <User className="h-4 w-4" /> : isSystem ? <AlertCircle className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
           </div>
           
-          <div className={`rounded-lg px-4 py-2 ${
+          <div className={`rounded-lg px-4 py-3 ${
             isUser 
               ? 'bg-blue-500 text-white' 
               : isSystem && message.isError
                 ? 'bg-red-100 text-red-800 border border-red-200'
                 : 'bg-gray-100 text-gray-800'
           }`}>
-            <div className="whitespace-pre-wrap">{message.content}</div>
+            {shouldRenderMarkdown ? (
+              <div className="markdown-content relative">
+                <ReactMarkdown components={MarkdownComponents}>
+                  {message.content}
+                </ReactMarkdown>
+                {/* 如果是简历内容，显示复制按钮 */}
+                {hasResumeContent(message.content) && (
+                  <button
+                    onClick={() => copyToClipboard(message.content, message.id)}
+                    className="absolute top-2 right-2 p-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
+                    title="复制简历内容"
+                  >
+                    {copiedMessageId === message.id ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-gray-500" />
+                    )}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="whitespace-pre-wrap">{message.content}</div>
+            )}
             
             {/* 显示建议选项 */}
             {message.suggestions && message.suggestions.length > 0 && (
