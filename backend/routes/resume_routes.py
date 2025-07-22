@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify, send_file
 from models import db, Resume
 from services.markdown_parser import ResumeMarkdownParser
 from services.pdf_generator import ResumePDFGenerator
-from routes.notification_routes import NotificationService
 import io
 import os
 from datetime import datetime
@@ -61,40 +60,32 @@ def receive_from_dify():
         db.session.add(resume)
         db.session.commit()
         
-        # 构建前端编辑页面URL
+        # 构建前端编辑页面URL  
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
         edit_url = f"/edit/{resume.id}"
         full_redirect_url = f"{frontend_url}{edit_url}"
         
-        # 🔥 发送实时通知给前端，触发自动跳转
-        try:
-            NotificationService.broadcast_resume_created(
-                resume_id=resume.id,
-                title=resume.title,
-                redirect_url=full_redirect_url
-            )
-            print(f"[NOTIFICATION] 简历创建通知已发送: {resume.title} -> {full_redirect_url}")
-        except Exception as notify_error:
-            print(f"[NOTIFICATION] 发送通知失败: {notify_error}")
+        # 🎯 简历创建成功，前端轮询机制会自动检测到新简历并跳转
+        print(f"[AUTO_REDIRECT] 简历已创建，等待前端自动跳转: {resume.title} -> {full_redirect_url}")
         
-        # 检查是否需要HTTP重定向（兼容旧的重定向方式）
+        # 检查是否需要HTTP重定向（兼容旧方式）
         auto_redirect = request.args.get('auto_redirect', '').lower() == 'true'
         if not auto_redirect and isinstance(data, dict):
             auto_redirect = data.get('auto_redirect', False)
         
         if auto_redirect:
-            # HTTP重定向：返回302重定向
+            # HTTP重定向：返回302重定向  
             from flask import redirect
             return redirect(full_redirect_url, code=302)
         else:
-            # 标准API响应：返回JSON + 实时通知已发送
+            # 标准API响应：返回JSON，前端轮询会检测到这个新简历
             return jsonify({
                 'success': True,
-                'message': '简历接收成功，实时通知已发送',
+                'message': '简历接收成功，前端将自动跳转',
                 'resume_id': resume.id,
                 'edit_url': edit_url,
                 'redirect_url': full_redirect_url,
-                'notification_sent': True
+                'auto_redirect_enabled': True
             }), 201
         
     except Exception as e:
