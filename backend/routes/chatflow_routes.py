@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from services.dify_chatflow_service import DifyChatflowService
 from services.markdown_parser import ResumeMarkdownParser
 from models import db, Resume
 from datetime import datetime
 import logging
+import json
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -265,4 +266,133 @@ def cleanup_sessions():
         return jsonify({
             'success': False,
             'error': f'清理失败: {str(e)}'
+        }), 500
+
+@chatflow_bp.route('/api/chatflow/stream', methods=['POST'])
+def stream_message():
+    """流式发送消息到浩流简历·flowork"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '缺少请求数据'
+            }), 400
+        
+        conversation_id = data.get('conversation_id')
+        message = data.get('message')
+        inputs = data.get('inputs', {})
+        
+        if not conversation_id or not message:
+            return jsonify({
+                'success': False,
+                'error': '缺少必要参数: conversation_id 和 message'
+            }), 400
+        
+        logger.info(f"流式发送消息到会话 {conversation_id}: {message[:100]}...")
+        
+        def generate():
+            try:
+                # 获取会话信息
+                if conversation_id not in dify_service.active_sessions:
+                    yield f"data: {json.dumps({'success': False, 'error': '会话不存在或已过期'})}\n\n"
+                    return
+                    
+                session = dify_service.active_sessions[conversation_id]
+                session['last_activity'] = datetime.utcnow()
+                
+                # 直接调用Dify API进行流式请求
+                url = f"{dify_service.dify_api_base}/chat-messages"
+                headers = {
+                    'Authorization': f'Bearer {dify_service.dify_api_key}',
+                    'Content-Type': 'application/json'
+                }
+                
+                dify_conversation_id = session.get('dify_conversation_id', '')
+                payload = {
+                    'inputs': inputs,
+                    'query': message,
+                    'response_mode': 'streaming',
+                    'user': f'user-{conversation_id}',
+                    'conversation_id': dify_conversation_id,
+                    'auto_generate_name': True
+                }
+                
+                import requests
+                response = requests.post(url, headers=headers, json=payload, stream=True, timeout=90)
+                response.raise_for_status()
+                
+                # 记录用户消息
+                session['messages'].append({
+                    'type': 'user',
+                    'content': message,
+                    'timestamp': datetime.utcnow()
+                })
+                
+                full_answer = ""
+                message_id = None
+                
+                # 转发流式响应
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line.strip():
+                        continue
+                    
+                    if line.startswith('data: '):
+                        try:
+                            data = json.loads(line[6:])
+                            event = data.get('event', '')
+                            
+                            if event == 'message':
+                                # 消息块事件
+                                chunk = data.get('answer', '')
+                                full_answer += chunk
+                                if not message_id:
+                                    message_id = data.get('message_id')
+                                
+                                # 转发给前端
+                                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk, 'success': True})}\n\n"
+                                
+                            elif event == 'message_end':
+                                # 消息结束
+                                metadata = data.get('metadata', {})
+                                
+                                # 记录AI回复
+                                session['messages'].append({
+                                    'type': 'assistant',
+                                    'content': full_answer,
+                                    'timestamp': datetime.utcnow(),
+                                    'metadata': metadata,
+                                    'message_id': message_id
+                                })
+                                
+                                # 检查是否完成简历创建
+                                is_complete = dify_service._is_resume_complete({'answer': full_answer, 'metadata': metadata})
+                                resume_content = None
+                                if is_complete:
+                                    session['status'] = 'completed'
+                                    resume_content = dify_service._extract_resume_content({'answer': full_answer, 'metadata': metadata})
+                                
+                                yield f"data: {json.dumps({'type': 'end', 'success': True, 'status': 'completed' if is_complete else 'active', 'resume_content': resume_content})}\n\n"
+                                break
+                                
+                        except json.JSONDecodeError:
+                            continue
+                    
+            except Exception as e:
+                logger.error(f"流式处理错误: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'success': False, 'error': str(e)})}\n\n"
+        
+        return Response(generate(), mimetype='text/event-stream', headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        })
+        
+    except Exception as e:
+        logger.error(f"流式发送消息时发生错误: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'流式发送消息失败: {str(e)}'
         }), 500

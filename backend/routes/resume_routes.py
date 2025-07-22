@@ -3,6 +3,7 @@ from models import db, Resume
 from services.markdown_parser import ResumeMarkdownParser
 from services.pdf_generator import ResumePDFGenerator
 import io
+import os
 from datetime import datetime
 
 resume_bp = Blueprint('resume', __name__)
@@ -59,12 +60,23 @@ def receive_from_dify():
         db.session.add(resume)
         db.session.commit()
         
-        return jsonify({
-            'success': True,
-            'message': '简历接收成功',
-            'resume_id': resume.id,
-            'edit_url': f'/edit/{resume.id}'
-        }), 201
+        # 检查是否需要自动跳转（来自浏览器的请求）
+        user_agent = request.headers.get('User-Agent', '')
+        is_browser_request = 'Mozilla' in user_agent or 'Chrome' in user_agent or 'Safari' in user_agent or 'Firefox' in user_agent
+        
+        if is_browser_request:
+            # 浏览器请求：返回302重定向到编辑页面
+            from flask import redirect
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
+            return redirect(f"{frontend_url}/edit/{resume.id}", code=302)
+        else:
+            # API请求：返回JSON响应
+            return jsonify({
+                'success': True,
+                'message': '简历接收成功',
+                'resume_id': resume.id,
+                'edit_url': f'/edit/{resume.id}'
+            }), 201
         
     except Exception as e:
         db.session.rollback()

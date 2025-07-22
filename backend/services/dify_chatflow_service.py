@@ -218,32 +218,17 @@ class DifyChatflowService:
             payload = {
                 'inputs': inputs,  # 应用定义的输入变量
                 'query': message,  # 用户输入/提问内容
-                'response_mode': 'blocking',  # 阻塞模式，等待完整响应
+                'response_mode': 'streaming',  # 流式模式，支持实时响应
                 'user': f'user-{conversation_id}',  # 用户标识，使用本地会话ID区分
                 'conversation_id': dify_conversation_id,  # Dify对话ID，首次为空
                 'auto_generate_name': True  # 自动生成对话标题
             }
             
-            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            response = requests.post(url, headers=headers, json=payload, stream=True, timeout=90)
             response.raise_for_status()
             
-            result = response.json()
-            
-            # 处理Dify chat-messages API响应格式
-            if result.get('event') == 'message':
-                # 更新会话ID（如果是新会话）
-                if conversation_id not in self.active_sessions and result.get('conversation_id'):
-                    conversation_id = result.get('conversation_id')
-                
-                return {
-                    'answer': result.get('answer', ''),
-                    'conversation_id': result.get('conversation_id', conversation_id),
-                    'message_id': result.get('message_id'),
-                    'metadata': result.get('metadata', {}),
-                    'suggestions': []  # 可以从其他API获取建议问题
-                }
-            else:
-                raise Exception(f"Dify API响应格式错误: {result}")
+            # 处理流式响应
+            return self._handle_streaming_response(response, conversation_id)
                 
         except requests.exceptions.RequestException as e:
             raise Exception(f"网络请求失败: {str(e)}")
@@ -350,3 +335,50 @@ class DifyChatflowService:
             
         except Exception as e:
             print(f"清理会话时出错: {str(e)}")
+    
+    def _handle_streaming_response(self, response, conversation_id):
+        """处理Dify流式响应"""
+        try:
+            full_answer = ""
+            dify_conversation_id = None
+            message_id = None
+            metadata = {}
+            
+            # 解析流式数据
+            for line in response.iter_lines(decode_unicode=True):
+                if not line.strip():
+                    continue
+                    
+                # 处理SSE格式: data: {...}
+                if line.startswith('data: '):
+                    try:
+                        data = json.loads(line[6:])  # 移除 'data: ' 前缀
+                        
+                        event = data.get('event', '')
+                        
+                        if event == 'message':
+                            # 消息块事件
+                            full_answer += data.get('answer', '')
+                            if not dify_conversation_id:
+                                dify_conversation_id = data.get('conversation_id')
+                            if not message_id:
+                                message_id = data.get('message_id')
+                        
+                        elif event == 'message_end':
+                            # 消息结束事件，包含完整的metadata
+                            metadata = data.get('metadata', {})
+                            break
+                            
+                    except json.JSONDecodeError:
+                        continue
+            
+            return {
+                'answer': full_answer,
+                'conversation_id': dify_conversation_id or conversation_id,
+                'message_id': message_id,
+                'metadata': metadata,
+                'suggestions': []
+            }
+            
+        except Exception as e:
+            raise Exception(f"处理流式响应失败: {str(e)}")
