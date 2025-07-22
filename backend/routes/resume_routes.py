@@ -65,8 +65,33 @@ def receive_from_dify():
         edit_url = f"/edit/{resume.id}"
         full_redirect_url = f"{frontend_url}{edit_url}"
         
-        # 🎯 简历创建成功，前端轮询机制会自动检测到新简历并跳转
-        print(f"[AUTO_REDIRECT] 简历已创建，等待前端自动跳转: {resume.title} -> {full_redirect_url}")
+        # 🎯 创建简历通知状态，前端会检查这个状态并显示弹窗
+        try:
+            import json
+            from pathlib import Path
+            
+            # 创建通知状态文件
+            notification_data = {
+                'type': 'resume_created',
+                'resume_id': resume.id,
+                'title': resume.title,
+                'edit_url': edit_url,
+                'redirect_url': full_redirect_url,
+                'timestamp': datetime.utcnow().isoformat(),
+                'shown': False  # 标记是否已显示给用户
+            }
+            
+            # 保存到临时文件
+            notification_file = Path('instance/latest_resume_notification.json')
+            notification_file.parent.mkdir(exist_ok=True)
+            
+            with open(notification_file, 'w', encoding='utf-8') as f:
+                json.dump(notification_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"[NOTIFICATION] 简历创建通知已保存: {resume.title} -> {full_redirect_url}")
+            
+        except Exception as e:
+            print(f"[NOTIFICATION] 保存通知状态失败: {e}")
         
         # 检查是否需要HTTP重定向（兼容旧方式）
         auto_redirect = request.args.get('auto_redirect', '').lower() == 'true'
@@ -216,6 +241,77 @@ def preview_html(resume_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@resume_bp.route('/api/resume-notification', methods=['GET'])
+def get_resume_notification():
+    """获取最新的简历创建通知"""
+    try:
+        import json
+        from pathlib import Path
+        
+        notification_file = Path('instance/latest_resume_notification.json')
+        
+        if not notification_file.exists():
+            return jsonify({
+                'success': True,
+                'notification': None
+            })
+        
+        # 读取通知数据
+        with open(notification_file, 'r', encoding='utf-8') as f:
+            notification_data = json.load(f)
+        
+        # 检查是否已经显示过
+        if notification_data.get('shown', True):
+            return jsonify({
+                'success': True,
+                'notification': None
+            })
+        
+        return jsonify({
+            'success': True,
+            'notification': notification_data
+        })
+        
+    except Exception as e:
+        print(f"[API] 获取通知失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@resume_bp.route('/api/resume-notification', methods=['POST'])
+def mark_notification_shown():
+    """标记通知已显示"""
+    try:
+        import json
+        from pathlib import Path
+        
+        notification_file = Path('instance/latest_resume_notification.json')
+        
+        if notification_file.exists():
+            # 读取现有数据
+            with open(notification_file, 'r', encoding='utf-8') as f:
+                notification_data = json.load(f)
+            
+            # 标记为已显示
+            notification_data['shown'] = True
+            
+            # 写回文件
+            with open(notification_file, 'w', encoding='utf-8') as f:
+                json.dump(notification_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'message': '通知已标记为已显示'
+        })
+        
+    except Exception as e:
+        print(f"[API] 标记通知失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @resume_bp.route('/api/health', methods=['GET'])
 def health_check():
