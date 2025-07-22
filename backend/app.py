@@ -3,6 +3,7 @@ from flask_cors import CORS
 from models import db
 from routes.resume_routes import resume_bp
 from routes.debug_routes import debug_bp
+from routes.chatflow_routes import chatflow_bp
 import os
 from dotenv import load_dotenv
 
@@ -35,6 +36,7 @@ def create_app():
     # 注册蓝图
     app.register_blueprint(resume_bp)
     app.register_blueprint(debug_bp)
+    app.register_blueprint(chatflow_bp)
     
     # 创建数据库表
     with app.app_context():
@@ -68,7 +70,12 @@ def create_app():
                 'resumes': '/api/resumes',
                 'resume_detail': '/api/resumes/<id>',
                 'export_pdf': '/api/resumes/<id>/pdf',
-                'preview': '/api/resumes/<id>/preview'
+                'preview': '/api/resumes/<id>/preview',
+                'chatflow_start': '/api/chatflow/start',
+                'chatflow_message': '/api/chatflow/message',
+                'chatflow_history': '/api/chatflow/history/<conversation_id>',
+                'chatflow_end': '/api/chatflow/end',
+                'chatflow_status': '/api/chatflow/status'
             }
         })
     

@@ -74,4 +74,34 @@ export const resumeAPI = {
   healthCheck: () => api.get('/api/health'),
 };
 
+export const chatflowAPI = {
+  // 启动Chatflow对话
+  startConversation: (userId = null) => api.post('/api/chatflow/start', { user_id: userId }),
+  
+  // 发送消息
+  sendMessage: (conversationId, message, inputs = {}) => api.post('/api/chatflow/message', {
+    conversation_id: conversationId,
+    message,
+    inputs
+  }),
+  
+  // 获取对话历史
+  getHistory: (conversationId) => api.get(`/api/chatflow/history/${conversationId}`),
+  
+  // 结束对话
+  endConversation: (conversationId) => api.post('/api/chatflow/end', { 
+    conversation_id: conversationId 
+  }),
+  
+  // 从Chatflow结果手动创建简历
+  createResumeFromChatflow: (markdownContent, title, conversationId) => api.post('/api/chatflow/create-resume', {
+    markdown_content: markdownContent,
+    title,
+    conversation_id: conversationId
+  }),
+  
+  // 检查Chatflow服务状态
+  getStatus: () => api.get('/api/chatflow/status'),
+};
+
 export default api;

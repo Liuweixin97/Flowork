@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Edit3, Download, Trash2, Eye, FileText, Clock, CheckSquare, Square, Plus } from 'lucide-react';
+import { Edit3, Download, Trash2, Eye, FileText, Clock, CheckSquare, Square, Plus, Bot } from 'lucide-react';
 import { resumeAPI } from '../utils/api';
 import { formatRelativeTime, downloadFile, truncate, cleanMarkdown } from '../utils/helpers';
 import EmptyState from './EmptyState';
+import ChatflowDialog from './ChatflowDialog';
 import toast from 'react-hot-toast';
 
 const ResumeList = () => {
@@ -15,6 +16,7 @@ const ResumeList = () => {
   const [createLoading, setCreateLoading] = useState(false);
   const [selectedResumes, setSelectedResumes] = useState(new Set());
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
+  const [showChatflowDialog, setShowChatflowDialog] = useState(false);
   
   useEffect(() => {
     loadResumes();
@@ -173,6 +175,24 @@ const ResumeList = () => {
     }
   };
   
+  const handleResumeGenerated = (generatedResume) => {
+    try {
+      // 如果有简历ID，直接跳转到编辑页面
+      if (generatedResume.resumeId) {
+        navigate(`/edit/${generatedResume.resumeId}`);
+        toast.success('简历已创建，正在跳转到编辑页面');
+        return;
+      }
+      
+      // 刷新列表以显示新创建的简历
+      loadResumes();
+      toast.success('简历创建完成，请在列表中查看');
+    } catch (error) {
+      console.error('处理生成的简历失败:', error);
+      toast.error('简历创建过程出现问题');
+    }
+  };
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -183,7 +203,13 @@ const ResumeList = () => {
   }
   
   if (resumes.length === 0) {
-    return <EmptyState onCreateNew={handleCreateNewResume} createLoading={createLoading} />;
+    return (
+      <EmptyState 
+        onCreateNew={handleCreateNewResume} 
+        onAICreate={() => setShowChatflowDialog(true)}
+        createLoading={createLoading} 
+      />
+    );
   }
   
   return (
@@ -192,20 +218,29 @@ const ResumeList = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">我的简历</h2>
-            <p className="text-gray-600 mt-1">管理您从Dify接收的简历</p>
+            <p className="text-gray-600 mt-1">管理您的简历和使用AI助手创建</p>
           </div>
-          <button
-            onClick={handleCreateNewResume}
-            disabled={createLoading}
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
-          >
-            {createLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-            ) : (
-              <Plus className="h-4 w-4 mr-2" />
-            )}
-            新建简历
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowChatflowDialog(true)}
+              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+            >
+              <Bot className="h-4 w-4 mr-2" />
+              AI创建简历
+            </button>
+            <button
+              onClick={handleCreateNewResume}
+              disabled={createLoading}
+              className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
+            >
+              {createLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              空白简历
+            </button>
+          </div>
         </div>
       </div>
 
@@ -323,6 +358,13 @@ const ResumeList = () => {
           </div>
         ))}
       </div>
+      
+      {/* Chatflow Dialog */}
+      <ChatflowDialog 
+        isOpen={showChatflowDialog}
+        onClose={() => setShowChatflowDialog(false)}
+        onResumeGenerated={handleResumeGenerated}
+      />
     </div>
   );
 };

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Download, ArrowLeft, Eye, EyeOff, RefreshCw, ChevronDown } from 'lucide-react';
+import { Save, Download, ArrowLeft, Eye, EyeOff, RefreshCw, ChevronDown, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { resumeAPI } from '../utils/api';
 import { formatDate, downloadFile, debounce } from '../utils/helpers';
 import toast from 'react-hot-toast';
+import ChatflowDialog from './ChatflowDialog';
 
 const ResumeEditor = () => {
   const { id } = useParams();
@@ -20,6 +21,7 @@ const ResumeEditor = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showChatflowDialog, setShowChatflowDialog] = useState(false);
   
   const exportMenuRef = useRef(null);
   
@@ -151,6 +153,32 @@ const ResumeEditor = () => {
     }
   };
   
+  const handleResumeGenerated = (generatedResume) => {
+    try {
+      // 如果有简历ID，直接跳转到编辑页面
+      if (generatedResume.resumeId) {
+        navigate(`/edit/${generatedResume.resumeId}`);
+        toast.success('简历已创建，正在跳转到编辑页面');
+        return;
+      }
+      
+      // 如果有简历内容，更新当前编辑器
+      if (generatedResume.content) {
+        const newMarkdown = generatedResume.content.markdown || generatedResume.content;
+        const newTitle = generatedResume.content.title || 'AI生成的简历';
+        
+        setMarkdown(newMarkdown);
+        setTitle(newTitle);
+        setHasUnsavedChanges(true);
+        
+        toast.success('简历内容已导入编辑器，请预览并调整');
+      }
+    } catch (error) {
+      console.error('处理生成的简历失败:', error);
+      toast.error('简历内容导入失败');
+    }
+  };
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -207,6 +235,14 @@ const ResumeEditor = () => {
                 有未保存的更改
               </span>
             )}
+            
+            <button
+              onClick={() => setShowChatflowDialog(true)}
+              className="flex items-center space-x-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+            >
+              <Bot className="h-4 w-4" />
+              <span>AI助手</span>
+            </button>
             
             <button
               onClick={() => setShowPreview(!showPreview)}
@@ -317,6 +353,13 @@ const ResumeEditor = () => {
           <li>• 使用右侧预览查看最终效果</li>
         </ul>
       </div>
+      
+      {/* Chatflow Dialog */}
+      <ChatflowDialog 
+        isOpen={showChatflowDialog}
+        onClose={() => setShowChatflowDialog(false)}
+        onResumeGenerated={handleResumeGenerated}
+      />
     </div>
   );
 };
