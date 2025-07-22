@@ -60,22 +60,27 @@ def receive_from_dify():
         db.session.add(resume)
         db.session.commit()
         
-        # 检查是否需要自动跳转（来自浏览器的请求）
-        user_agent = request.headers.get('User-Agent', '')
-        is_browser_request = 'Mozilla' in user_agent or 'Chrome' in user_agent or 'Safari' in user_agent or 'Firefox' in user_agent
+        # 检查是否需要自动跳转到编辑页面
+        # 方式1: 通过查询参数 auto_redirect=true 明确指定
+        auto_redirect = request.args.get('auto_redirect', '').lower() == 'true'
         
-        if is_browser_request:
-            # 浏览器请求：返回302重定向到编辑页面
+        # 方式2: 通过请求体参数指定
+        if not auto_redirect and isinstance(data, dict):
+            auto_redirect = data.get('auto_redirect', False)
+        
+        if auto_redirect:
+            # 需要重定向：返回302重定向到编辑页面
             from flask import redirect
             frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
             return redirect(f"{frontend_url}/edit/{resume.id}", code=302)
         else:
-            # API请求：返回JSON响应
+            # 标准API响应：返回JSON
             return jsonify({
                 'success': True,
                 'message': '简历接收成功',
                 'resume_id': resume.id,
-                'edit_url': f'/edit/{resume.id}'
+                'edit_url': f'/edit/{resume.id}',
+                'redirect_url': f"{os.getenv('FRONTEND_URL', 'http://localhost:3002')}/edit/{resume.id}"
             }), 201
         
     except Exception as e:
