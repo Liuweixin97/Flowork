@@ -48,21 +48,11 @@ class DifyChatflowService:
             
             self.active_sessions[local_session_id] = session_info
             
-            # 发送初始消息启动浩流简历·flowork对话
-            initial_response = self._send_message_to_workflow(
-                conversation_id=local_session_id,
-                message="你好，我想创建一份个人简历",
-                inputs={}
-            )
-            
-            # 更新会话信息中的Dify对话ID
-            if initial_response.get('conversation_id'):
-                session_info['dify_conversation_id'] = initial_response.get('conversation_id')
-            
+            # 不自动发送初始消息，等待用户主动开始对话
             return {
                 'success': True,
                 'conversation_id': local_session_id,
-                'initial_message': initial_response.get('answer', '您好！我是浩流简历·flowork助手，我将引导您一步步创建个人简历。让我们开始吧！'),
+                'initial_message': '您好！我是浩流简历·flowork助手，我将引导您一步步创建个人简历。请告诉我您的基本信息，让我们开始吧！',
                 'status': 'started'
             }
             
