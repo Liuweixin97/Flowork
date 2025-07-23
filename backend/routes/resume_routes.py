@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, send_file
-from models import db, Resume
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from models import db, Resume, User
 from services.markdown_parser import ResumeMarkdownParser
 from services.pdf_generator import ResumePDFGenerator
 from services.html_pdf_generator import HTMLPDFGenerator
+from services.auth_service import AuthService, is_token_blacklisted
 import io
 import os
 from datetime import datetime
@@ -11,6 +13,86 @@ resume_bp = Blueprint('resume', __name__)
 parser = ResumeMarkdownParser()
 pdf_generator = ResumePDFGenerator()
 html_pdf_generator = HTMLPDFGenerator()
+
+def get_current_user_or_none():
+    """获取当前用户，无token时返回None"""
+    try:
+        user_id = get_jwt_identity()
+        if user_id:
+            return User.find_by_public_id(user_id)
+    except:
+        pass
+    return None
+
+def check_token_blacklist():
+    """检查token是否在黑名单中"""
+    try:
+        jti = get_jwt()['jti']
+        if is_token_blacklisted(jti):
+            return jsonify({
+                'success': False,
+                'errors': ['令牌已失效，请重新登录']
+            }), 401
+    except:
+        pass
+    return None
+
+@resume_bp.route('/api/resumes', methods=['POST'])
+@jwt_required()
+def create_resume():
+    """创建新简历"""
+    try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
+        current_user = AuthService.get_current_user()
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'errors': ['用户未找到']
+            }), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'errors': ['请提供简历数据']
+            }), 400
+        
+        # 获取简历内容
+        title = data.get('title', '我的简历')
+        raw_markdown = data.get('raw_markdown', '# 我的简历\n\n请在这里编辑您的简历内容...')
+        is_public = data.get('is_public', False)
+        
+        # 解析Markdown为结构化数据
+        structured_data = parser.parse(raw_markdown)
+        
+        # 创建简历记录
+        resume = Resume(
+            title=title,
+            raw_markdown=raw_markdown,
+            is_public=is_public,
+            user_id=current_user.id
+        )
+        resume.set_structured_data(structured_data)
+        
+        db.session.add(resume)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '简历创建成功',
+            'resume': resume.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': '创建简历失败'
+        }), 500
 
 @resume_bp.route('/api/resumes/from-dify', methods=['POST'])
 def receive_from_dify():
@@ -45,6 +127,7 @@ def receive_from_dify():
         # 从Dify传来的数据中提取Markdown内容
         markdown_content = data.get('resume_markdown', data.get('content', data.get('markdown', '')))
         title = data.get('title', '来自Dify的简历')
+        user_id = data.get('user_id', None)  # 可选用户ID
         
         if not markdown_content:
             return jsonify({'error': '缺少简历内容'}), 400
@@ -52,10 +135,28 @@ def receive_from_dify():
         # 解析Markdown为结构化数据
         structured_data = parser.parse(markdown_content)
         
+        # 查找用户（如果提供了用户ID）
+        user = None
+        if user_id:
+            user = User.find_by_public_id(user_id) or User.query.get(user_id)
+        
+        # 如果没有指定用户，创建匿名简历（为了向后兼容）
+        if not user:
+            # 创建一个临时用户或使用默认的系统用户
+            # 这里我们暂时创建公开简历，不关联特定用户
+            # 在生产环境中，建议要求用户登录
+            return jsonify({
+                'error': '需要用户认证才能创建简历',
+                'message': '请登录后再试',
+                'redirect_to_login': True
+            }), 401
+        
         # 创建简历记录
         resume = Resume(
             title=title,
-            raw_markdown=markdown_content
+            raw_markdown=markdown_content,
+            user_id=user.id,
+            is_public=False  # 默认私有
         )
         resume.set_structured_data(structured_data)
         
@@ -63,7 +164,7 @@ def receive_from_dify():
         db.session.commit()
         
         # 构建前端编辑页面URL  
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3002')
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
         edit_url = f"/edit/{resume.id}"
         full_redirect_url = f"{frontend_url}{edit_url}"
         
@@ -120,38 +221,119 @@ def receive_from_dify():
         return jsonify({'error': f'处理请求时发生错误: {str(e)}'}), 500
 
 @resume_bp.route('/api/resumes', methods=['GET'])
+@jwt_required(optional=True)
 def get_resumes():
-    """获取所有简历列表"""
+    """获取简历列表（支持认证和非认证访问）"""
     try:
-        resumes = Resume.query.order_by(Resume.updated_at.desc()).all()
+        current_user = get_current_user_or_none()
+        
+        # 只有在有认证用户的情况下才检查token黑名单
+        if current_user:
+            blacklist_result = check_token_blacklist()
+            if blacklist_result:
+                return blacklist_result
+        
+        if current_user:
+            # 认证用户：显示自己的简历 + 公开简历
+            if current_user.is_admin:
+                # 管理员：显示所有简历
+                resumes = Resume.query.order_by(Resume.updated_at.desc()).all()
+            else:
+                # 普通用户：显示自己的简历和公开简历
+                resumes = Resume.query.filter(
+                    db.or_(
+                        Resume.user_id == current_user.id,
+                        Resume.is_public == True
+                    )
+                ).order_by(Resume.updated_at.desc()).all()
+        else:
+            # 未认证用户：只显示公开简历
+            resumes = Resume.query.filter_by(is_public=True).order_by(Resume.updated_at.desc()).all()
+        
         return jsonify({
             'success': True,
-            'resumes': [resume.to_dict() for resume in resumes]
+            'resumes': [resume.to_dict(include_content=False) for resume in resumes],
+            'total': len(resumes),
+            'current_user': current_user.to_dict() if current_user else None
         })
+        
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': '获取简历列表失败'
+        }), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>', methods=['GET'])
+@jwt_required(optional=True)
 def get_resume(resume_id):
     """获取特定简历"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = get_current_user_or_none()
+        
+        # 检查访问权限
+        if not resume.can_access(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限访问此简历']
+            }), 403
+        
         return jsonify({
             'success': True,
-            'resume': resume.to_dict()
+            'resume': resume.to_dict(),
+            'can_edit': resume.can_edit(current_user)
         })
+        
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': '获取简历失败'
+        }), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>', methods=['PUT'])
+@jwt_required()
 def update_resume(resume_id):
     """更新简历"""
     try:
-        resume = Resume.query.get_or_404(resume_id)
-        data = request.get_json()
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
         
+        resume = Resume.query.get_or_404(resume_id)
+        current_user = AuthService.get_current_user()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'errors': ['用户未找到']
+            }), 401
+        
+        # 检查编辑权限
+        if not resume.can_edit(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限编辑此简历']
+            }), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'errors': ['请提供更新数据']
+            }), 400
+        
+        # 更新简历字段
         if 'title' in data:
             resume.title = data['title']
+        
+        if 'is_public' in data and isinstance(data['is_public'], bool):
+            resume.is_public = data['is_public']
         
         if 'raw_markdown' in data:
             resume.raw_markdown = data['raw_markdown']
@@ -173,13 +355,37 @@ def update_resume(resume_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': '更新简历失败'
+        }), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>', methods=['DELETE'])
+@jwt_required()
 def delete_resume(resume_id):
     """删除简历"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = AuthService.get_current_user()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'errors': ['用户未找到']
+            }), 401
+        
+        # 检查删除权限
+        if not resume.can_edit(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限删除此简历']
+            }), 403
+        
         db.session.delete(resume)
         db.session.commit()
         
@@ -190,13 +396,31 @@ def delete_resume(resume_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': '删除简历失败'
+        }), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>/pdf', methods=['GET'])
+@jwt_required(optional=True)
 def export_pdf(resume_id):
     """导出简历为PDF"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = get_current_user_or_none()
+        
+        # 检查访问权限
+        if not resume.can_access(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限访问此简历']
+            }), 403
+        
         structured_data = resume.get_structured_data()
         
         if not structured_data:
@@ -230,10 +454,25 @@ def export_pdf(resume_id):
         return jsonify({'error': f'PDF生成失败: {str(e)}'}), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>/pdf-html', methods=['GET'])
+@jwt_required(optional=True)
 def export_pdf_html(resume_id):
     """使用HTML渲染方式导出简历为PDF"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = get_current_user_or_none()
+        
+        # 检查访问权限
+        if not resume.can_access(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限访问此简历']
+            }), 403
+        
         structured_data = resume.get_structured_data()
         
         if not structured_data:
@@ -268,10 +507,25 @@ def export_pdf_html(resume_id):
         return jsonify({'error': f'HTML转PDF生成失败: {str(e)}'}), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>/html', methods=['GET'])
+@jwt_required(optional=True)
 def get_resume_html(resume_id):
     """获取简历的HTML内容（用于预览或调试）"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = get_current_user_or_none()
+        
+        # 检查访问权限
+        if not resume.can_access(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限访问此简历']
+            }), 403
+        
         structured_data = resume.get_structured_data()
         
         if not structured_data:
@@ -302,10 +556,25 @@ def get_resume_html(resume_id):
         return jsonify({'error': f'HTML生成失败: {str(e)}'}), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>/preview', methods=['GET'])
+@jwt_required(optional=True)
 def preview_html(resume_id):
     """预览简历HTML"""
     try:
+        # 检查token黑名单
+        blacklist_result = check_token_blacklist()
+        if blacklist_result:
+            return blacklist_result
+        
         resume = Resume.query.get_or_404(resume_id)
+        current_user = get_current_user_or_none()
+        
+        # 检查访问权限
+        if not resume.can_access(current_user):
+            return jsonify({
+                'success': False,
+                'errors': ['没有权限访问此简历']
+            }), 403
+        
         html_content = parser.markdown_to_html(resume.raw_markdown)
         
         return jsonify({
@@ -393,5 +662,6 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'resume-editor',
+        'version': '1.3.0',
         'timestamp': datetime.utcnow().isoformat()
     })
