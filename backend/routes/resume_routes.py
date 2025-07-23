@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, send_file
 from models import db, Resume
 from services.markdown_parser import ResumeMarkdownParser
 from services.pdf_generator import ResumePDFGenerator
+from services.html_pdf_generator import HTMLPDFGenerator
 import io
 import os
 from datetime import datetime
@@ -9,6 +10,7 @@ from datetime import datetime
 resume_bp = Blueprint('resume', __name__)
 parser = ResumeMarkdownParser()
 pdf_generator = ResumePDFGenerator()
+html_pdf_generator = HTMLPDFGenerator()
 
 @resume_bp.route('/api/resumes/from-dify', methods=['POST'])
 def receive_from_dify():
@@ -226,6 +228,78 @@ def export_pdf(resume_id):
         
     except Exception as e:
         return jsonify({'error': f'PDF生成失败: {str(e)}'}), 500
+
+@resume_bp.route('/api/resumes/<int:resume_id>/pdf-html', methods=['GET'])
+def export_pdf_html(resume_id):
+    """使用HTML渲染方式导出简历为PDF"""
+    try:
+        resume = Resume.query.get_or_404(resume_id)
+        structured_data = resume.get_structured_data()
+        
+        if not structured_data:
+            # 如果没有结构化数据，重新解析
+            structured_data = parser.parse(resume.raw_markdown)
+            resume.set_structured_data(structured_data)
+            db.session.commit()
+        
+        # 检查智能一页参数
+        smart_onepage = request.args.get('smart_onepage', 'false').lower() == 'true'
+        
+        # 生成PDF（使用HTML渲染方式）
+        pdf_bytes = html_pdf_generator.generate_pdf(structured_data, smart_onepage=smart_onepage)
+        
+        # 创建文件流
+        pdf_io = io.BytesIO(pdf_bytes)
+        pdf_io.seek(0)
+        
+        # 文件名添加HTML标识
+        method_suffix = "_HTML渲染" 
+        onepage_suffix = "_智能一页" if smart_onepage else ""
+        filename = f"{resume.title.replace(' ', '_')}{method_suffix}{onepage_suffix}.pdf"
+        
+        return send_file(
+            pdf_io,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'HTML转PDF生成失败: {str(e)}'}), 500
+
+@resume_bp.route('/api/resumes/<int:resume_id>/html', methods=['GET'])
+def get_resume_html(resume_id):
+    """获取简历的HTML内容（用于预览或调试）"""
+    try:
+        resume = Resume.query.get_or_404(resume_id)
+        structured_data = resume.get_structured_data()
+        
+        if not structured_data:
+            # 如果没有结构化数据，重新解析
+            structured_data = parser.parse(resume.raw_markdown)
+            resume.set_structured_data(structured_data)
+            db.session.commit()
+        
+        # 检查智能一页参数
+        smart_onepage = request.args.get('smart_onepage', 'false').lower() == 'true'
+        
+        # 获取HTML内容
+        html_content = html_pdf_generator.get_html_content(structured_data, smart_onepage=smart_onepage)
+        
+        # 检查是否返回原始HTML（用于浏览器预览）
+        raw = request.args.get('raw', 'false').lower() == 'true'
+        if raw:
+            from flask import Response
+            return Response(html_content, mimetype='text/html')
+        
+        return jsonify({
+            'success': True,
+            'html_content': html_content,
+            'smart_onepage': smart_onepage
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'HTML生成失败: {str(e)}'}), 500
 
 @resume_bp.route('/api/resumes/<int:resume_id>/preview', methods=['GET'])
 def preview_html(resume_id):

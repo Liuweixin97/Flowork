@@ -66,6 +66,21 @@ export const resumeAPI = {
       smart_onepage: smartOnepage
     }
   }),
+
+  // 使用HTML渲染方式导出PDF
+  exportPDFHTML: (id, smartOnepage = false) => api.get(`/api/resumes/${id}/pdf-html`, {
+    responseType: 'blob',
+    params: {
+      smart_onepage: smartOnepage
+    }
+  }),
+
+  // 获取HTML内容（用于预览）
+  getHTML: (id, smartOnepage = false) => api.get(`/api/resumes/${id}/html`, {
+    params: {
+      smart_onepage: smartOnepage
+    }
+  }),
   
   // 预览HTML
   previewHTML: (id) => api.get(`/api/resumes/${id}/preview`),

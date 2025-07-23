@@ -123,21 +123,27 @@ const ResumeEditor = () => {
     }
   };
   
-  const handleDownloadPDF = async (smartOnepage = false) => {
+  const handleDownloadPDF = async (smartOnepage = false, useHTML = false) => {
     try {
       setDownloading(true);
       setShowExportMenu(false);
       
-      const response = await resumeAPI.exportPDF(id, smartOnepage);
-      const suffix = smartOnepage ? '_智能一页' : '';
-      const filename = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}${suffix}.pdf`;
+      const response = useHTML 
+        ? await resumeAPI.exportPDFHTML(id, smartOnepage)
+        : await resumeAPI.exportPDF(id, smartOnepage);
+      
+      const methodSuffix = useHTML ? '_HTML渲染' : '';
+      const onepageSuffix = smartOnepage ? '_智能一页' : '';
+      const filename = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}${methodSuffix}${onepageSuffix}.pdf`;
       downloadFile(response.data, filename);
       
-      const successMsg = smartOnepage ? 'PDF智能一页导出成功' : 'PDF导出成功';
+      const methodDesc = useHTML ? 'HTML渲染' : '传统';
+      const onepageDesc = smartOnepage ? '智能一页' : '';
+      const successMsg = `PDF${onepageDesc}导出成功 (${methodDesc}方式)`;
       toast.success(successMsg);
     } catch (error) {
       console.error('PDF导出失败:', error);
-      toast.error('PDF导出失败');
+      toast.error(`PDF导出失败: ${error.response?.data?.error || error.message}`);
     } finally {
       setDownloading(false);
     }
@@ -281,26 +287,48 @@ const ResumeEditor = () => {
               </button>
               
               {showExportMenu && !downloading && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                   <div className="py-1">
+                    <div className="px-4 py-2 text-xs text-gray-500 font-medium uppercase tracking-wide border-b border-gray-100">
+                      传统PDF导出 (ReportLab)
+                    </div>
                     <button
-                      onClick={() => handleDownloadPDF(false)}
+                      onClick={() => handleDownloadPDF(false, false)}
                       className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       普通PDF导出
                     </button>
                     <button
-                      onClick={() => handleDownloadPDF(true)}
+                      onClick={() => handleDownloadPDF(true, false)}
                       className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       智能一页导出
                     </button>
+                    
+                    <div className="px-4 py-2 text-xs text-gray-500 font-medium uppercase tracking-wide border-b border-gray-100 border-t border-gray-100">
+                      HTML渲染导出 (推荐)
+                    </div>
+                    <button
+                      onClick={() => handleDownloadPDF(false, true)}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      HTML普通导出
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPDF(true, true)}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      HTML智能一页导出
+                    </button>
                   </div>
                   <div className="border-t border-gray-100 px-4 py-2">
                     <p className="text-xs text-gray-500">
-                      智能一页：自动调整字号和间距，确保内容适合一页A4纸
+                      • 智能一页：自动调整字号和间距，确保内容适合一页A4纸<br/>
+                      • HTML渲染：更好的格式兼容性，解决段落丢失问题
                     </p>
                   </div>
                 </div>
