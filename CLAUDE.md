@@ -4,28 +4,32 @@
 
 ## 项目概述
 
-这是一个简历编辑器应用程序，旨在与Dify AI工作流集成。包含以下组成部分：
-- **后端**: Python Flask API，使用SQLAlchemy ORM进行简历管理和PDF生成
-- **前端**: React SPA，使用Vite构建系统和Tailwind CSS样式
+这是一个支持多用户的简历编辑器应用程序，旨在与Dify AI工作流集成。包含以下组成部分：
+- **后端**: Python Flask API，使用SQLAlchemy ORM和JWT认证进行用户管理、简历管理和PDF生成
+- **前端**: React SPA，使用Vite构建系统、Tailwind CSS样式和React Context进行状态管理
+- **认证系统**: 完整的用户注册、登录、权限控制系统，支持多用户数据隔离
 - **集成**: 接收来自Dify HTTP节点的简历数据，并提供可视化编辑界面
 
 ## 核心架构
 
 ### 后端结构
-- `app.py`: Flask应用工厂，配置CORS以支持多源访问
-- `models.py`: SQLAlchemy模型，Resume实体存储markdown和结构化JSON数据
-- `routes/`: 按功能拆分的API蓝图 (resume_routes, debug_routes)  
-- `services/`: 业务逻辑模块 (markdown_parser, pdf_generator, html_pdf_generator)
+- `app.py`: Flask应用工厂，配置JWT认证、CORS和PostgreSQL/SQLite数据库支持
+- `models.py`: SQLAlchemy模型，包括User和Resume实体，支持用户关联和权限控制
+- `routes/`: 按功能拆分的API蓝图 (resume_routes, auth_routes, debug_routes)  
+- `services/`: 业务逻辑模块 (markdown_parser, pdf_generator, html_pdf_generator, auth_service)
 
 ### 前端结构
-- React Router设置，包含两个主要路由: HomePage (/) 和 EditPage (/edit/:id)
-- 组件架构: Layout包装器、支持markdown的ResumeEditor、ResumeList
-- `utils/api.js`中的API通信层使用axios
+- React Router设置，包含认证路由: LoginPage (/login), RegisterPage (/register) 和主要功能: HomePage (/) 和 EditPage (/edit/:id)
+- 组件架构: Layout包装器、支持markdown的ResumeEditor、ResumeList、认证组件(LoginForm, RegisterForm)
+- `contexts/AuthContext.jsx`提供全局认证状态管理和JWT token处理
+- `utils/api.js`中的API通信层使用axios，包含认证拦截器
 - 使用Tailwind CSS样式和react-hot-toast通知
 
 ### 数据库架构
-- 单一`Resume`模型，字段包括: id, title, raw_markdown, structured_data (JSON), timestamps
-- SQLite数据库，启动时自动创建表
+- **User模型**: 用户认证和资料管理，包括username, email, password_hash, full_name, is_admin等字段
+- **Resume模型**: 简历数据，包括title, raw_markdown, structured_data (JSON), user_id (外键), is_public等字段
+- 支持PostgreSQL (生产环境) 和SQLite (开发环境)，启动时自动创建表
+- 用户-简历一对多关系，支持数据隔离和权限控制
 
 ## 开发命令
 
@@ -60,22 +64,38 @@ docker-compose logs -f  # 查看日志
 - 期望JSON格式: `{"resume_markdown": "...", "title": "..."}`
 - 返回简历ID和编辑URL用于用户重定向
 
-### 核心CRUD操作
-- GET `/api/resumes` - 列出所有简历
-- GET `/api/resumes/{id}` - 获取特定简历及结构化数据
-- PUT `/api/resumes/{id}` - 更新简历内容
-- GET `/api/resumes/{id}/pdf` - 导出为PDF (支持 `smart_onepage=true` 参数)
-- GET `/api/resumes/{id}/pdf-html` - 使用HTML渲染方式导出PDF
-- GET `/api/resumes/{id}/html` - 获取HTML内容用于预览
+### 用户认证API
+- POST `/api/auth/register` - 用户注册
+- POST `/api/auth/login` - 用户登录
+- POST `/api/auth/logout` - 用户登出
+- POST `/api/auth/refresh` - 刷新JWT token
+- GET `/api/auth/me` - 获取当前用户信息
+- PUT `/api/auth/profile` - 更新用户资料
+- POST `/api/auth/change-password` - 修改密码
+- POST `/api/auth/check-username` - 检查用户名可用性
+- POST `/api/auth/check-email` - 检查邮箱可用性
+
+### 核心CRUD操作 (支持认证和权限控制)
+- GET `/api/resumes` - 列出简历 (认证用户看到自己的+公开的，未认证用户只看公开的)
+- POST `/api/resumes` - 创建简历 (需要认证)
+- GET `/api/resumes/{id}` - 获取特定简历及结构化数据 (基于权限)
+- PUT `/api/resumes/{id}` - 更新简历内容 (需要所有者权限)
+- DELETE `/api/resumes/{id}` - 删除简历 (需要所有者权限)
+- GET `/api/resumes/{id}/pdf` - 导出为PDF (基于访问权限, 支持 `smart_onepage=true` 参数)
+- GET `/api/resumes/{id}/pdf-html` - 使用HTML渲染方式导出PDF (基于访问权限)
+- GET `/api/resumes/{id}/html` - 获取HTML内容用于预览 (基于访问权限)
 
 ## 主要依赖
 
 ### 后端
-- Flask + Flask-SQLAlchemy + Flask-CORS API层
+- Flask + Flask-SQLAlchemy + Flask-CORS + Flask-JWT-Extended API层
+- Flask-Bcrypt 用于密码哈希加密
 - reportlab 用于PDF生成，支持HarmonyOS Sans字体
 - python-markdown 用于处理markdown
 - python-dotenv 用于环境配置
 - playwright 用于HTML转PDF (备用方案)
+- email-validator 用于邮箱格式验证
+- psycopg2 用于PostgreSQL连接 (生产环境)
 
 ### 前端
 - React 18 配合React Router进行SPA导航
@@ -88,9 +108,12 @@ docker-compose logs -f  # 查看日志
 ### 后端 (.env)
 ```
 SECRET_KEY=your-secret-key
-DATABASE_URL=sqlite:///resume_editor.db  
+JWT_SECRET_KEY=your-jwt-secret-key
+DATABASE_URL=sqlite:///resume_editor.db  # 开发环境
+# DATABASE_URL=postgresql://user:pass@localhost/dbname  # 生产环境
 HOST=0.0.0.0
 PORT=8080
+FRONTEND_URL=http://localhost:3000
 ```
 
 ### 前端 (.env)
@@ -190,6 +213,31 @@ playwright install chromium
 
 ## 版本历史
 
+### v2.0.0 - 用户认证系统和多用户支持 (2025-07-23)
+- **重大更新**:
+  - 完整的用户认证系统：注册、登录、登出、密码修改
+  - JWT令牌认证，支持访问令牌和刷新令牌
+  - 用户数据隔离，个人简历管理
+  - 基于角色的权限控制 (普通用户/管理员)
+- **前端功能**:
+  - 现代化登录/注册界面，响应式设计
+  - 实时表单验证 (用户名/邮箱可用性检查)
+  - 认证状态管理和自动令牌刷新
+  - 开发模式快速登录功能 (demo@gmail.com, admin@gmail.com)
+- **用户体验优化**:
+  - 未登录用户友好提示和自动跳转
+  - 丰富的简历模板，包含完整示例内容
+  - 智能跳转，登录后返回原页面
+- **技术架构**:
+  - PostgreSQL生产数据库支持，兼容Heroku等云平台
+  - BCrypt密码哈希，增强安全性
+  - CORS优化，支持ngrok等工具进行生产部署
+  - 令牌黑名单机制，安全登出
+- **API增强**:
+  - 新增完整认证API端点
+  - 简历API增加权限控制和用户隔离
+  - 向后兼容，支持原有Dify集成功能
+
 ### v1.3.0 - HTML转PDF优化 (2025-07-23)
 - **新增功能**:
   - 新增HTML转PDF导出方式，解决段落丢失问题
@@ -231,9 +279,29 @@ playwright install chromium
   - SQLite数据库
   - HarmonyOS Sans字体支持
 
+## 用户认证和权限说明
+
+### 开发模式测试账户
+- **演示用户**: demo@gmail.com / demo123 (普通用户权限)
+- **管理员**: admin@gmail.com / admin123 (管理员权限，可查看所有简历)
+
+### 权限控制说明
+- **未认证用户**: 只能查看公开简历，无法创建或编辑
+- **普通用户**: 可以创建、编辑、删除自己的简历，查看自己的和公开的简历
+- **管理员**: 可以查看和管理所有用户的简历
+
+### 安全特性
+- 密码使用BCrypt哈希存储
+- JWT令牌有效期为24小时
+- 支持令牌刷新和黑名单机制
+- 邮箱格式验证和用户名唯一性检查
+- CORS配置支持多域名访问
+
 ## 重要说明
 在进行任何修改时，请遵循以下原则：
 - 总是先阅读现有代码以了解架构和规范
 - 保持代码风格一致性
 - 优先编辑现有文件而非创建新文件
 - 遵循安全最佳实践，避免暴露密钥和敏感信息
+- 认证相关的修改需要同时考虑前后端的兼容性
+- 新增API端点时要考虑权限控制和数据隔离
