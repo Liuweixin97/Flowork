@@ -718,28 +718,27 @@ class ResumePDFGenerator:
                     story.append(para)
     
     def _clean_markdown(self, text: str) -> str:
-        """清理Markdown标记，保留内容"""
+        """清理Markdown标记，保留加粗、斜体等格式效果"""
         if not text:
             return ""
         
-        # 移除各种Markdown标记
         # 移除标题标记 (#)
         text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
         
-        # 移除粗体标记 (**)
-        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        # 转换粗体标记 - 使用简单的font标签
+        text = re.sub(r'\*\*(.*?)\*\*', rf'<font name="{self.chinese_bold_font}">\1</font>', text)
         
-        # 移除斜体标记 (*)
-        text = re.sub(r'\*(.*?)\*', r'\1', text)
+        # 转换斜体标记 - 使用中等字体，简单格式
+        text = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)', rf'<font name="{self.chinese_medium_font}">\1</font>', text)
         
-        # 移除代码标记 (`)
-        text = re.sub(r'`(.*?)`', r'\1', text)
+        # 转换下划线斜体标记
+        text = re.sub(r'_([^_]+?)_', rf'<font name="{self.chinese_medium_font}">\1</font>', text)
         
-        # 移除链接标记 [text](url)
-        text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+        # 转换代码标记 - 使用背景色区分代码
+        text = re.sub(r'`([^`]+?)`', rf'<font name="{self.chinese_font}" backColor="#f5f5f5">\1</font>', text)
         
-        # 移除下划线标记 (_)
-        text = re.sub(r'_(.*?)_', r'\1', text)
+        # 移除链接标记，保留文本
+        text = re.sub(r'\[([^\]]+?)\]\([^)]*?\)', r'\1', text)
         
         # 移除列表标记但保留缩进
         text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
@@ -755,6 +754,9 @@ class ResumePDFGenerator:
         
         # 清理多余的空行
         text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
+        
+        # 清理行首标点符号问题 - 移除行首多余的标点符号
+        text = re.sub(r'^[，。；：！？、]+', '', text, flags=re.MULTILINE)
         
         # 移除行首行尾空白
         text = text.strip()
