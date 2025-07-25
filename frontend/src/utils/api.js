@@ -11,6 +11,9 @@ const api = axios.create({
   },
 });
 
+// 使api实例在全局可用，用于AuthContext
+window.axios = api;
+
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
@@ -43,6 +46,36 @@ api.interceptors.response.use(
   }
 );
 
+// 认证相关API
+export const authAPI = {
+  // 用户注册
+  register: (data) => api.post('/api/auth/register', data),
+  
+  // 用户登录
+  login: (data) => api.post('/api/auth/login', data),
+  
+  // 刷新token
+  refreshToken: () => api.post('/api/auth/refresh'),
+  
+  // 用户登出
+  logout: () => api.post('/api/auth/logout'),
+  
+  // 获取当前用户信息
+  getCurrentUser: () => api.get('/api/auth/me'),
+  
+  // 更新用户资料
+  updateProfile: (data) => api.put('/api/auth/profile', data),
+  
+  // 修改密码
+  changePassword: (data) => api.post('/api/auth/change-password', data),
+  
+  // 检查用户名是否可用
+  checkUsername: (username) => api.post('/api/auth/check-username', { username }),
+  
+  // 检查邮箱是否可用  
+  checkEmail: (email) => api.post('/api/auth/check-email', { email }),
+};
+
 export const resumeAPI = {
   // 获取所有简历
   getResumes: () => api.get('/api/resumes'),
@@ -51,7 +84,10 @@ export const resumeAPI = {
   getResume: (id) => api.get(`/api/resumes/${id}`),
   
   // 创建新简历
-  createResume: (data) => api.post('/api/resumes/from-dify', data),
+  createResume: (data) => api.post('/api/resumes', data),
+  
+  // 从Dify创建简历（向后兼容）
+  createFromDify: (data) => api.post('/api/resumes/from-dify', data),
   
   // 更新简历
   updateResume: (id, data) => api.put(`/api/resumes/${id}`, data),
@@ -90,8 +126,8 @@ export const resumeAPI = {
 };
 
 export const chatflowAPI = {
-  // 启动Chatflow对话
-  startConversation: (userId = null) => api.post('/api/chatflow/start', { user_id: userId }),
+  // 启动Chatflow对话（需要认证）
+  startConversation: () => api.post('/api/chatflow/start', {}),
   
   // 发送消息
   sendMessage: (conversationId, message, inputs = {}) => api.post('/api/chatflow/message', {
@@ -102,11 +138,21 @@ export const chatflowAPI = {
 
   // 发送流式消息
   sendStreamMessage: (conversationId, message, inputs = {}, onChunk, onComplete, onError) => {
+    // 获取存储的访问token
+    const accessToken = localStorage.getItem('access_token');
+    
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    // 如果有token，添加Authorization头
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
     return fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/api/chatflow/stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       body: JSON.stringify({
         conversation_id: conversationId,
         message: message,

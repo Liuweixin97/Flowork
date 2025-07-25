@@ -58,7 +58,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
         };
         
         setMessages([initialMsg]);
-        toast.success('浩流简历·flowork已启动');
+        toast.success('浩流简历已启动');
         
         // 聚焦输入框
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -68,7 +68,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
     } catch (error) {
       console.error('启动对话失败:', error);
       setConversationStatus('error');
-      toast.error('启动浩流简历·flowork失败，请重试');
+      toast.error('启动浩流简历失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -126,14 +126,13 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           
           // 检查是否完成简历生成
           if (data.status === 'completed' && data.resume_content) {
-            setConversationStatus('completed');
             setGeneratedResume({
               content: data.resume_content,
               resumeId: data.resume_id,
               editUrl: data.edit_url
             });
             
-            toast.success('简历生成完成！');
+            toast.success('简历生成完成！可以继续完善或直接使用');
           }
           
           setIsLoading(false);
@@ -145,16 +144,38 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           // 移除流式消息并添加错误消息
           setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
           
+          // 提供详细的错误信息
+          let errorContent = '抱歉，消息发送失败。';
+          let errorDetails = '';
+          
+          if (error.message) {
+            if (error.message.includes('401')) {
+              errorContent = '认证失败，请重新登录后再试。';
+            } else if (error.message.includes('413')) {
+              errorContent = '消息内容过长，请尝试分段发送或简化内容。';
+              errorDetails = '建议：将长内容分为多个较短的消息发送';
+            } else if (error.message.includes('timeout')) {
+              errorContent = '请求超时，服务器响应时间过长。';
+              errorDetails = '建议：检查网络连接或稍后重试';
+            } else if (error.message.includes('500')) {
+              errorContent = '服务器内部错误，请稍后重试。';
+              errorDetails = '如果问题持续存在，请联系技术支持';
+            } else if (error.message.includes('network')) {
+              errorContent = '网络连接失败，请检查网络状态。';
+              errorDetails = '建议：检查网络连接或重新连接WiFi';
+            }
+          }
+          
           const errorMessage = {
             id: Date.now() + 2,
             type: 'system',
-            content: '抱歉，消息发送失败，请重试。',
+            content: errorContent + (errorDetails ? `\n\n${errorDetails}` : ''),
             timestamp: new Date(),
             isError: true
           };
           
           setMessages(prev => [...prev, errorMessage]);
-          toast.error('消息发送失败');
+          toast.error(errorContent);
           setIsLoading(false);
         }
       );
@@ -164,16 +185,34 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
       // 移除流式消息并添加错误消息
       setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
       
+      // 统一错误处理逻辑
+      let errorContent = '消息发送过程中发生错误。';
+      let errorDetails = '';
+      
+      if (error.response?.status === 413) {
+        errorContent = '消息内容过长，超出服务器限制。';
+        errorDetails = '建议：缩短消息内容或分多次发送';
+      } else if (error.response?.status === 401) {
+        errorContent = '用户认证已过期，请重新登录。';
+        errorDetails = '您的登录状态已失效，请刷新页面重新登录';
+      } else if (error.response?.status >= 500) {
+        errorContent = '服务器暂时无法处理请求。';
+        errorDetails = '服务器可能正在维护，请稍后重试';
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorContent = '网络连接中断或服务器无响应。';
+        errorDetails = '请检查网络连接状态';
+      }
+      
       const errorMessage = {
         id: Date.now() + 2,
         type: 'system',
-        content: '抱歉，消息发送失败，请重试。',
+        content: errorContent + (errorDetails ? `\n\n${errorDetails}` : ''),
         timestamp: new Date(),
         isError: true
       };
       
       setMessages(prev => [...prev, errorMessage]);
-      toast.error('消息发送失败');
+      toast.error(errorContent);
       setIsLoading(false);
     }
   };
@@ -277,12 +316,12 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
             {isUser ? <User className="h-4 w-4" /> : isSystem ? <AlertCircle className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
           </div>
           
-          <div className={`rounded-lg px-4 py-3 ${
+          <div className={`rounded-lg px-4 py-3 shadow-sm ${
             isUser 
-              ? 'bg-blue-500 text-white' 
+              ? 'bg-blue-500 text-white shadow-blue-100' 
               : isSystem && message.isError
-                ? 'bg-red-100 text-red-800 border border-red-200'
-                : 'bg-gray-100 text-gray-800'
+                ? 'bg-red-50 text-red-800 border border-red-200 shadow-red-50'
+                : 'bg-gray-50 text-gray-800 border border-gray-200 shadow-gray-50'
           }`}>
             {shouldRenderMarkdown ? (
               <div className="markdown-content relative">
@@ -338,13 +377,13 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl h-[600px] flex flex-col">
+    <div className="fixed top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-blue-900/20 via-slate-900/40 to-indigo-900/30 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-fadeIn">
+      <div className="bg-white rounded-xl w-full max-w-2xl h-[600px] flex flex-col shadow-2xl border border-gray-200/50 animate-slideUp backdrop-blur-xl">
         {/* 头部 */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200/60 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-t-xl">
           <div className="flex items-center space-x-2">
             <MessageCircle className="h-5 w-5 text-green-500" />
-            <h3 className="text-lg font-semibold">浩流简历·flowork</h3>
+            <h3 className="text-lg font-semibold">浩流简历</h3>
             <span className={`px-2 py-1 text-xs rounded-full ${
               conversationStatus === 'active' 
                 ? 'bg-green-100 text-green-800' 
@@ -374,9 +413,9 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           {conversationStatus === 'inactive' && (
             <div className="text-center py-12">
               <Bot className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h4 className="text-lg font-medium text-gray-700 mb-2">浩流简历·flowork</h4>
+              <h4 className="text-lg font-medium text-gray-700 mb-2">浩流简历</h4>
               <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                我是浩流简历·flowork智能助手，将引导您一步步创建个人简历，包括基本信息、工作经历、教育背景、技能专长等内容。
+                我是浩流简历智能助手，将引导您一步步创建个人简历，包括基本信息、工作经历、教育背景、技能专长等内容。
               </p>
               <button
                 onClick={startConversation}
@@ -399,9 +438,14 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           
           {isLoading && (
             <div className="flex justify-start">
-              <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-4 py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                <span className="text-gray-600">浩流简历·flowork正在思考...</span>
+              <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-3 shadow-sm animate-pulse">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                <span className="text-blue-700 font-medium">浩流简历正在思考...</span>
+                <div className="flex space-x-1">
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                </div>
               </div>
             </div>
           )}
@@ -410,8 +454,8 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
         </div>
         
         {/* 完成状态显示 */}
-        {conversationStatus === 'completed' && generatedResume && (
-          <div className="px-4 py-3 bg-green-50 border-t border-green-200">
+        {generatedResume && (
+          <div className="px-4 py-3 bg-green-50 border-t border-green-200 rounded-b-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
@@ -428,7 +472,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
         )}
         
         {/* 输入区域 */}
-        {conversationStatus === 'active' && (
+        {(conversationStatus === 'active' || generatedResume) && (
           <div className="p-4 border-t border-gray-200">
             <div className="flex space-x-2">
               <input
@@ -437,7 +481,7 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="请输入您的回答..."
+                placeholder={generatedResume ? "继续优化简历或提出修改建议..." : "请输入您的回答..."}
                 disabled={isLoading}
                 className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               />

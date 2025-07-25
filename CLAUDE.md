@@ -213,6 +213,29 @@ playwright install chromium
 
 ## 版本历史
 
+### v2.1.0 - 一键启动环境和弹窗优化 (2025-07-25)
+- **新增功能**:
+  - 新增一键启动完整环境脚本 (`一键启动完整环境.sh`)，支持同时启动Dify和简历编辑器前后端服务
+  - 新增停止完整环境脚本 (`停止完整环境.sh`)，统一停止所有服务
+  - 优化简历创建通知弹窗，使用React Portal渲染确保在最高层级显示
+  - 添加弹窗动画效果，提升用户体验
+- **配置更新**:
+  - 更新内网穿透配置，支持新的花生壳域名 (mi3qm328989.vicp.fun)
+  - 修复内网穿透访问时后端服务未运行的配置问题
+  - 优化前端允许的主机配置，支持多种内网穿透工具
+- **用户体验改进**:
+  - 简历创建通知弹窗现在直接在对话流界面顶层显示，而非编辑器下方
+  - 弹窗添加缩放动画和阴影效果，视觉体验更佳
+  - 改进按钮样式，增加悬停效果
+- **技术优化**:
+  - 使用`createPortal`将弹窗渲染到document.body，避免z-index层级问题
+  - 启动脚本增加详细的依赖检查和错误处理
+  - 支持后台运行服务并保存PID文件便于管理
+- **启动方式**:
+  - 一键启动: `./一键启动完整环境.sh`
+  - 原有启动: `python3 manage.py start`
+  - 停止服务: `./停止完整环境.sh` 或 `python3 manage.py stop`
+
 ### v2.0.0 - 用户认证系统和多用户支持 (2025-07-23)
 - **重大更新**:
   - 完整的用户认证系统：注册、登录、登出、密码修改
@@ -296,6 +319,113 @@ playwright install chromium
 - 支持令牌刷新和黑名单机制
 - 邮箱格式验证和用户名唯一性检查
 - CORS配置支持多域名访问
+
+## Dify完整卸载记录 (2025-07-25)
+
+### 卸载原因
+- PostgreSQL配置文件损坏导致数据库容器持续重启
+- 用户确认数据丢失可接受，要求完整卸载后手动重装
+
+### 卸载操作记录
+
+#### 1. 停止并删除所有Dify容器
+```bash
+cd /Users/liuweixin/Desktop/MyProjects/dify/docker
+docker-compose down -v --remove-orphans
+```
+**结果**: 成功停止并删除了所有Dify相关容器
+
+#### 2. 删除所有Dify相关Docker镜像
+```bash
+# 查找所有Dify镜像
+docker images | grep dify
+
+# 删除找到的镜像
+docker rmi langgenius/dify-web:1.6.0
+docker rmi langgenius/dify-api:1.6.0
+docker rmi langgenius/dify-plugin-daemon:0.1.3-local
+docker rmi langgenius/dify-sandbox:0.2.12
+```
+**结果**: 成功删除所有Dify Docker镜像，释放约2GB磁盘空间
+
+#### 3. 清理Docker系统资源
+```bash
+# 清理未使用的卷
+docker volume prune -f
+
+# 清理未使用的网络
+docker network prune -f
+```
+**结果**: 清理完成，无额外空间回收
+
+#### 4. 删除Dify本地数据文件
+```bash
+# 删除整个volumes目录，包含数据库数据
+rm -rf /Users/liuweixin/Desktop/MyProjects/dify/docker/volumes
+```
+**结果**: 成功删除所有持久化数据，包括：
+- PostgreSQL数据库文件
+- Redis缓存数据
+- 应用配置和用户数据
+- 上传的文件和媒体资源
+
+#### 5. 更新简历编辑器配置
+- 注释掉backend/.env中的Dify API配置
+- 添加"已卸载，需重新配置"说明
+
+### 卸载验证
+```bash
+# 确认没有Dify相关容器
+docker ps -a | grep dify
+# (无输出，确认清理完成)
+
+# 确认没有Dify相关镜像
+docker images | grep dify
+# (无输出，确认清理完成)
+
+# 确认数据目录已删除
+ls -la /Users/liuweixin/Desktop/MyProjects/dify/docker/volumes
+# (目录不存在，确认清理完成)
+```
+
+### 重新安装说明
+如需重新安装Dify，请执行以下步骤：
+
+1. **进入Dify目录**
+   ```bash
+   cd /Users/liuweixin/Desktop/MyProjects/dify/docker
+   ```
+
+2. **检查Docker Compose配置**
+   ```bash
+   # 确认docker-compose.yaml文件完整
+   cat docker-compose.yaml
+   ```
+
+3. **启动Dify服务**
+   ```bash
+   # 拉取最新镜像并启动
+   docker-compose up -d
+   
+   # 查看启动日志
+   docker-compose logs -f
+   ```
+
+4. **等待服务初始化**
+   - 数据库初始化需要1-2分钟
+   - 等待所有容器状态变为healthy
+   - 访问 http://localhost 确认服务可用
+
+5. **重新配置简历编辑器集成**
+   - 在Dify中创建新的应用
+   - 获取新的API Key
+   - 更新backend/.env中的DIFY_API_BASE和DIFY_API_KEY
+   - 取消注释相关配置行
+
+### 注意事项
+- 此次卸载为完全清理，所有Dify数据已永久删除
+- 重新安装后需要重新创建应用和配置API Key
+- 简历编辑器的Dify集成功能在重新配置前将无法使用
 
 ## 重要说明
 在进行任何修改时，请遵循以下原则：

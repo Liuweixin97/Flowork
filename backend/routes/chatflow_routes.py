@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify, Response
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from services.dify_chatflow_service import DifyChatflowService
 from services.markdown_parser import ResumeMarkdownParser
-from models import db, Resume
+from services.auth_service import AuthService
+from models import db, Resume, User
 from datetime import datetime
 import logging
 import json
@@ -15,18 +17,31 @@ dify_service = DifyChatflowService()
 parser = ResumeMarkdownParser()
 
 @chatflow_bp.route('/api/chatflow/start', methods=['POST'])
+@jwt_required()
 def start_chatflow():
-    """启动Dify Chatflow对话"""
+    """启动Dify Chatflow对话（需要认证）"""
     try:
-        data = request.get_json() or {}
-        user_id = data.get('user_id')
+        # 获取当前认证用户
+        current_user = AuthService.get_current_user()
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'error': '用户认证失败'
+            }), 401
         
-        logger.info(f"启动Chatflow对话，用户ID: {user_id}")
+        logger.info(f"启动Chatflow对话，用户: {current_user.username} (ID: {current_user.public_id})")
         
-        result = dify_service.start_conversation(user_id)
+        # 将用户信息传递给Dify服务
+        result = dify_service.start_conversation(current_user.public_id)
         
+        # 在会话中保存用户信息
         if result['success']:
-            logger.info(f"对话启动成功，会话ID: {result['conversation_id']}")
+            conversation_id = result['conversation_id']
+            if conversation_id in dify_service.active_sessions:
+                dify_service.active_sessions[conversation_id]['user_id'] = current_user.id
+                dify_service.active_sessions[conversation_id]['user_public_id'] = current_user.public_id
+            
+            logger.info(f"对话启动成功，会话ID: {conversation_id}, 用户: {current_user.username}")
             return jsonify(result), 200
         else:
             logger.error(f"对话启动失败: {result['error']}")
@@ -184,36 +199,55 @@ def create_resume_from_chatflow_manual():
             'error': f'创建简历失败: {str(e)}'
         }), 500
 
-def create_resume_from_chatflow(markdown_content, title, conversation_id=None):
+def create_resume_from_chatflow(markdown_content, title, conversation_id=None, user_id=None):
     """从Chatflow结果创建简历记录"""
     try:
+        # 获取用户信息
+        user = None
+        if user_id:
+            user = User.query.get(user_id)
+        elif conversation_id and conversation_id in dify_service.active_sessions:
+            # 从会话中获取用户信息
+            session_user_id = dify_service.active_sessions[conversation_id].get('user_id')
+            if session_user_id:
+                user = User.query.get(session_user_id)
+        
+        if not user:
+            logger.warning("创建简历时未找到关联用户，创建为公开简历")
+        
         # 解析Markdown为结构化数据
         structured_data = parser.parse(markdown_content)
         
         # 创建简历记录
         resume = Resume(
             title=title,
-            raw_markdown=markdown_content
+            raw_markdown=markdown_content,
+            user_id=user.id if user else None,
+            is_public=user is None  # 如果没有用户，创建为公开简历
         )
         resume.set_structured_data(structured_data)
         
-        # 如果有会话ID，可以添加到metadata中
-        if conversation_id:
-            current_data = resume.get_structured_data() or {}
-            current_data['_metadata'] = {
-                'source': 'dify_chatflow',
-                'conversation_id': conversation_id,
-                'created_at': datetime.utcnow().isoformat()
-            }
-            resume.set_structured_data(current_data)
+        # 添加metadata信息
+        current_data = resume.get_structured_data() or {}
+        current_data['_metadata'] = {
+            'source': 'dify_chatflow',
+            'conversation_id': conversation_id,
+            'created_at': datetime.utcnow().isoformat(),
+            'user_id': user.public_id if user else None,
+            'username': user.username if user else None
+        }
+        resume.set_structured_data(current_data)
         
         db.session.add(resume)
         db.session.commit()
+        
+        logger.info(f"简历创建成功 - ID: {resume.id}, 标题: {title}, 用户: {user.username if user else 'Anonymous'}")
         
         return resume
         
     except Exception as e:
         db.session.rollback()
+        logger.error(f"创建简历失败: {str(e)}")
         raise Exception(f'数据库操作失败: {str(e)}')
 
 @chatflow_bp.route('/api/chatflow/status', methods=['GET'])
@@ -269,9 +303,17 @@ def cleanup_sessions():
         }), 500
 
 @chatflow_bp.route('/api/chatflow/stream', methods=['POST'])
+@jwt_required()
 def stream_message():
-    """流式发送消息到浩流简历·flowork"""
+    """流式发送消息到浩流简历·flowork（需要认证）"""
     try:
+        # 验证用户认证
+        current_user = AuthService.get_current_user()
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'error': '用户认证失败'
+            }), 401
         data = request.get_json()
         
         if not data:
@@ -369,11 +411,38 @@ def stream_message():
                                 # 检查是否完成简历创建
                                 is_complete = dify_service._is_resume_complete({'answer': full_answer, 'metadata': metadata})
                                 resume_content = None
+                                resume_id = None
+                                edit_url = None
+                                
                                 if is_complete:
                                     session['status'] = 'completed'
                                     resume_content = dify_service._extract_resume_content({'answer': full_answer, 'metadata': metadata})
+                                    
+                                    # 直接在这里创建简历记录，使用当前认证用户
+                                    if resume_content and 'markdown' in resume_content:
+                                        try:
+                                            created_resume = create_resume_from_chatflow(
+                                                markdown_content=resume_content['markdown'],
+                                                title=resume_content.get('title', '浩流简历生成'),
+                                                conversation_id=conversation_id,
+                                                user_id=session.get('user_id')  # 从会话中获取用户ID
+                                            )
+                                            resume_id = created_resume.id
+                                            edit_url = f'/edit/{created_resume.id}'
+                                            logger.info(f"简历创建成功，ID: {resume_id}, 用户: {session.get('user_id')}")
+                                        except Exception as resume_error:
+                                            logger.error(f"创建简历失败: {str(resume_error)}")
                                 
-                                yield f"data: {json.dumps({'type': 'end', 'success': True, 'status': 'completed' if is_complete else 'active', 'resume_content': resume_content})}\n\n"
+                                result_data = {
+                                    'type': 'end', 
+                                    'success': True, 
+                                    'status': 'completed' if is_complete else 'active', 
+                                    'resume_content': resume_content,
+                                    'resume_id': resume_id,
+                                    'edit_url': edit_url
+                                }
+                                
+                                yield f"data: {json.dumps(result_data)}\n\n"
                                 break
                                 
                         except json.JSONDecodeError:

@@ -44,39 +44,12 @@ def create_app():
         app.config['JWT_COOKIE_CSRF_PROTECT'] = True
         app.config['SESSION_COOKIE_SECURE'] = True
         app.config['SESSION_COOKIE_HTTPONLY'] = True
-    
-    # 启用CORS，支持开发、生产和ngrok环境
-    allowed_origins = [
-        'http://localhost:3000', 
-        'http://localhost:3001',
-        'http://localhost:3002',
-        'http://localhost:5173',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001', 
-        'http://127.0.0.1:3002',
-        'http://127.0.0.1:5173'
-    ]
-    
-    # 生产环境和ngrok支持
-    if os.getenv('FLASK_ENV') == 'production' or os.getenv('NGROK_URL'):
-        # 添加ngrok域名
-        if os.getenv('NGROK_URL'):
-            allowed_origins.append(os.getenv('NGROK_URL'))
-        # 添加自定义域名
-        if os.getenv('FRONTEND_URL'):
-            allowed_origins.append(os.getenv('FRONTEND_URL'))
-        # 开发模式下允许所有ngrok域名
-        if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
-            from flask_cors import cross_origin
-            CORS(app, origins="*", supports_credentials=True)
-        else:
-            CORS(app, origins=allowed_origins, supports_credentials=True,
-                 allow_headers=['Content-Type', 'Authorization', 'X-Client-ID'],
-                 methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
-    else:
-        CORS(app, origins=allowed_origins, supports_credentials=True,
-             allow_headers=['Content-Type', 'Authorization', 'X-Client-ID'],
-             methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+
+    # ==================== CORS 调试修改 ====================
+    # 为了解决花生壳等隧道工具的跨域问题，我们暂时允许所有来源的请求。
+    # 原始的复杂判断逻辑已被暂时替换为下面这一行简单的配置。
+    CORS(app, supports_credentials=True, origins="*")
+    # ========================================================
     
     # 初始化扩展
     db.init_app(app)
@@ -158,7 +131,6 @@ def create_app():
             'version': '1.3.0',
             'features': ['用户认证', 'JWT会话', '多用户隔离', 'HTML转PDF', '智能一页'],
             'endpoints': {
-                # 认证相关
                 'auth_register': '/api/auth/register',
                 'auth_login': '/api/auth/login',
                 'auth_refresh': '/api/auth/refresh',
@@ -166,7 +138,6 @@ def create_app():
                 'auth_me': '/api/auth/me',
                 'auth_profile': '/api/auth/profile',
                 'auth_change_password': '/api/auth/change-password',
-                # 简历相关
                 'health': '/api/health',
                 'receive_from_dify': '/api/resumes/from-dify',
                 'resumes': '/api/resumes',
@@ -175,14 +146,12 @@ def create_app():
                 'export_pdf_html': '/api/resumes/<id>/pdf-html',
                 'resume_html': '/api/resumes/<id>/html',
                 'preview': '/api/resumes/<id>/preview',
-                # 聊天流相关
                 'chatflow_start': '/api/chatflow/start',
                 'chatflow_message': '/api/chatflow/message',
                 'chatflow_stream': '/api/chatflow/stream',
                 'chatflow_history': '/api/chatflow/history/<conversation_id>',
                 'chatflow_end': '/api/chatflow/end',
                 'chatflow_status': '/api/chatflow/status',
-                # 通知相关
                 'notification_events': '/api/notifications/events',
                 'notification_test': '/api/notifications/test'
             },

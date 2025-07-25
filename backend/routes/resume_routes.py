@@ -94,7 +94,54 @@ def create_resume():
             'error': '创建简历失败'
         }), 500
 
+def get_or_create_dify_user():
+    """获取或创建Dify系统用户"""
+    try:
+        # 尝试找到现有的Dify系统用户
+        dify_user = User.query.filter_by(username='dify_system').first()
+        
+        if not dify_user:
+            print("[DIFY] 创建Dify系统用户")
+            # 创建Dify系统用户
+            dify_user = User(
+                username='dify_system',
+                email='dify@system.local',
+                password='dify_system_password_123',
+                full_name='Dify系统用户'
+            )
+            dify_user.is_admin = False
+            db.session.add(dify_user)
+            db.session.commit()
+            print(f"[DIFY] Dify系统用户已创建: ID={dify_user.id}")
+        else:
+            print(f"[DIFY] 找到现有Dify系统用户: ID={dify_user.id}")
+        
+        return dify_user
+    except Exception as e:
+        print(f"[DIFY] 创建Dify系统用户失败: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # 回滚
+        db.session.rollback()
+        
+        # 重新尝试查找现有用户
+        existing_user = User.query.filter_by(username='dify_system').first()
+        if existing_user:
+            print(f"[DIFY] 找到回滚后的现有用户: ID={existing_user.id}")
+            return existing_user
+        
+        # 如果还是没有，尝试使用第一个用户或admin用户作为fallback
+        fallback_user = User.query.filter_by(username='admin').first() or User.query.first()
+        if fallback_user:
+            print(f"[DIFY] 使用fallback用户: {fallback_user.username} (ID={fallback_user.id})")
+            return fallback_user
+            
+        print("[DIFY] 严重错误：无法找到任何用户，无法处理简历")
+        return None
+
 @resume_bp.route('/api/resumes/from-dify', methods=['POST'])
+@jwt_required(optional=True)
 def receive_from_dify():
     """接收来自Dify的HTTP请求节点的简历数据"""
     try:
@@ -135,28 +182,31 @@ def receive_from_dify():
         # 解析Markdown为结构化数据
         structured_data = parser.parse(markdown_content)
         
-        # 查找用户（如果提供了用户ID）
-        user = None
-        if user_id:
+        # 获取用户信息，优先使用当前认证用户
+        user = get_current_user_or_none()
+        
+        # 如果没有当前认证用户，尝试使用传递的user_id
+        if not user and user_id:
             user = User.find_by_public_id(user_id) or User.query.get(user_id)
         
-        # 如果没有指定用户，创建匿名简历（为了向后兼容）
+        # 如果依然没有用户，使用Dify系统用户
         if not user:
-            # 创建一个临时用户或使用默认的系统用户
-            # 这里我们暂时创建公开简历，不关联特定用户
-            # 在生产环境中，建议要求用户登录
-            return jsonify({
-                'error': '需要用户认证才能创建简历',
-                'message': '请登录后再试',
-                'redirect_to_login': True
-            }), 401
+            user = get_or_create_dify_user()
+            if not user:
+                return jsonify({
+                    'error': '系统错误：无法找到或创建用户，请联系管理员',
+                    'details': '数据库中没有任何用户记录'
+                }), 500
+            print(f"[DIFY] 使用Dify系统用户: {user.username} (ID: {user.id})")
+        else:
+            print(f"[DIFY] 找到认证用户: {user.username} (ID: {user.id})")
         
         # 创建简历记录
         resume = Resume(
             title=title,
             raw_markdown=markdown_content,
-            user_id=user.id,
-            is_public=False  # 默认私有
+            user_id=user.id,  # 现在总是有用户
+            is_public=True  # Dify生成的简历默认设为公开
         )
         resume.set_structured_data(structured_data)
         

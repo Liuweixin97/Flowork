@@ -171,7 +171,7 @@ const ResumeEditor = () => {
       // 如果有简历内容，更新当前编辑器
       if (generatedResume.content) {
         const newMarkdown = generatedResume.content.markdown || generatedResume.content;
-        const newTitle = generatedResume.content.title || '浩流简历·flowork生成的简历';
+        const newTitle = generatedResume.content.title || '浩流简历生成的简历';
         
         setMarkdown(newMarkdown);
         setTitle(newTitle);
@@ -247,7 +247,7 @@ const ResumeEditor = () => {
               className="flex items-center space-x-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
             >
               <Bot className="h-4 w-4" />
-              <span>浩流简历·flowork</span>
+              <span>浩流简历</span>
             </button>
             
             <button
@@ -364,7 +364,7 @@ const ResumeEditor = () => {
             </div>
             <div className="p-6 overflow-auto" style={{ maxHeight: '600px' }}>
               <div className="markdown-content">
-                <ReactMarkdown>{markdown || '预览区域将显示浩流简历·flowork渲染后的内容...'}</ReactMarkdown>
+                <ReactMarkdown>{markdown || '预览区域将显示浩流简历渲染后的内容...'}</ReactMarkdown>
               </div>
             </div>
           </div>
