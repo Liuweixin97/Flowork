@@ -12,7 +12,8 @@ export default defineConfig({
       '.cpolar.cn', 
       '.r20.vip.cpolar.cn',
       // 花生壳域名配置
-      'mi3qm328989.vicp.fun' 
+      'mi3qm328989.vicp.fun',
+      '23928mq418.vicp.fun'
     ]
   },
   build: {

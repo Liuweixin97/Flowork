@@ -1,7 +1,26 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+// 动态检测API URL - 支持本地开发和内网穿透
+const getApiBaseUrl = () => {
+  // 如果设置了环境变量，直接使用
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // 根据当前访问的host动态决定API地址
+  const currentHost = window.location.host;
+  
+  // 如果是通过花生壳访问
+  if (currentHost.includes('vicp.fun')) {
+    return 'http://23928mq418.vicp.fun:36218';
+  }
+  
+  // 默认本地开发环境
+  return 'http://localhost:8080';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -180,6 +199,62 @@ export const chatflowAPI = {
               try {
                 const data = JSON.parse(line.slice(6));
                 
+                // 处理Dify标准SSE事件格式
+                if (data.event === 'message') {
+                  // 消息块事件
+                  if (data.answer) {
+                    onChunk(data.answer);
+                  }
+                } else if (data.event === 'message_end') {
+                  // 消息结束事件
+                  onComplete({
+                    type: 'end',
+                    status: 'completed',
+                    metadata: data.metadata,
+                    task_id: data.task_id,
+                    message_id: data.message_id,
+                    conversation_id: data.conversation_id
+                  });
+                  return;
+                } else if (data.event === 'error') {
+                  // Dify错误事件格式
+                  const errorInfo = {
+                    task_id: data.task_id,
+                    message_id: data.message_id,
+                    status: data.status,
+                    code: data.code,
+                    message: data.message,
+                    event: 'error'
+                  };
+                  onError(new Error(data.message || '对话流处理出错'), errorInfo);
+                  return;
+                } else if (data.event === 'workflow_finished') {
+                  // 工作流完成事件
+                  const workflowData = data.data;
+                  if (workflowData.status === 'failed') {
+                    onError(new Error(workflowData.error || '工作流执行失败'), {
+                      workflow_run_id: data.workflow_run_id,
+                      error: workflowData.error,
+                      status: workflowData.status
+                    });
+                    return;
+                  }
+                } else if (data.event === 'node_finished') {
+                  // 节点完成事件，检查是否有失败的节点
+                  const nodeData = data.data;
+                  if (nodeData.status === 'failed') {
+                    onError(new Error(nodeData.error || `节点 ${nodeData.title} 执行失败`), {
+                      node_id: nodeData.node_id,
+                      node_title: nodeData.title,
+                      node_type: nodeData.node_type,
+                      error: nodeData.error,
+                      status: nodeData.status
+                    });
+                    return;
+                  }
+                }
+                
+                // 向后兼容原有格式
                 if (data.type === 'chunk') {
                   onChunk(data.content);
                 } else if (data.type === 'end') {

@@ -139,17 +139,62 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
           setIsLoading(false);
         },
         // onError: 处理错误
-        (error) => {
-          console.error('流式消息发送失败:', error);
+        (error, errorInfo) => {
+          console.error('流式消息发送失败:', error, errorInfo);
           
           // 移除流式消息并添加错误消息
           setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
           
-          // 提供详细的错误信息
-          let errorContent = '抱歉，消息发送失败。';
+          // 处理Dify标准错误信息
+          let errorContent = '抱歉，对话流处理失败。';
           let errorDetails = '';
+          let errorCode = '';
           
-          if (error.message) {
+          if (errorInfo && errorInfo.event === 'error') {
+            // Dify标准错误格式
+            errorContent = errorInfo.message || '对话流出错';
+            errorCode = errorInfo.code ? `错误代码: ${errorInfo.code}` : '';
+            
+            // 根据HTTP状态码提供更具体的错误信息
+            if (errorInfo.status) {
+              switch (errorInfo.status) {
+                case 400:
+                  errorDetails = '请求参数有误，请检查输入内容';
+                  break;
+                case 401:
+                  errorDetails = '认证失败，请重新登录';
+                  break;
+                case 403:
+                  errorDetails = '权限不足，无法访问此功能';
+                  break;
+                case 413:
+                  errorDetails = '消息内容过长，请缩短后重试';
+                  break;
+                case 429:
+                  errorDetails = '请求过于频繁，请稍后再试';
+                  break;
+                case 500:
+                  errorDetails = '服务器内部错误，请联系技术支持';
+                  break;
+                case 503:
+                  errorDetails = '服务暂时不可用，请稍后重试';
+                  break;
+                default:
+                  errorDetails = `HTTP错误 ${errorInfo.status}`;
+              }
+            }
+          } else if (errorInfo && errorInfo.node_title) {
+            // 工作流节点错误
+            errorContent = `工作流节点 "${errorInfo.node_title}" 执行失败`;
+            errorDetails = errorInfo.error || '节点处理过程中发生错误';
+            errorCode = `节点ID: ${errorInfo.node_id}`;
+          } else if (errorInfo && errorInfo.workflow_run_id) {
+            // 工作流错误
+            errorContent = '工作流执行失败';
+            errorDetails = errorInfo.error || '工作流处理过程中发生错误';
+            errorCode = `工作流ID: ${errorInfo.workflow_run_id}`;
+          } else if (error.message) {
+            // 通用错误处理
             if (error.message.includes('401')) {
               errorContent = '认证失败，请重新登录后再试。';
             } else if (error.message.includes('413')) {
@@ -164,15 +209,27 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
             } else if (error.message.includes('network')) {
               errorContent = '网络连接失败，请检查网络状态。';
               errorDetails = '建议：检查网络连接或重新连接WiFi';
+            } else {
+              errorContent = error.message;
             }
+          }
+          
+          // 构建详细错误信息
+          let fullErrorMessage = errorContent;
+          if (errorDetails) {
+            fullErrorMessage += `\n\n详情：${errorDetails}`;
+          }
+          if (errorCode) {
+            fullErrorMessage += `\n\n${errorCode}`;
           }
           
           const errorMessage = {
             id: Date.now() + 2,
             type: 'system',
-            content: errorContent + (errorDetails ? `\n\n${errorDetails}` : ''),
+            content: fullErrorMessage,
             timestamp: new Date(),
-            isError: true
+            isError: true,
+            errorInfo: errorInfo // 保存原始错误信息用于调试
           };
           
           setMessages(prev => [...prev, errorMessage]);
@@ -345,7 +402,25 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
                 )}
               </div>
             ) : (
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div className="whitespace-pre-wrap">
+                {message.content}
+                {/* 显示错误详情按钮 */}
+                {message.isError && message.errorInfo && (
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-red-600 hover:text-red-800 font-medium">
+                      查看技术详情
+                    </summary>
+                    <div className="mt-2 p-2 bg-red-100 rounded border text-red-700 font-mono text-xs">
+                      {message.errorInfo.task_id && <div>任务ID: {message.errorInfo.task_id}</div>}
+                      {message.errorInfo.message_id && <div>消息ID: {message.errorInfo.message_id}</div>}
+                      {message.errorInfo.code && <div>错误代码: {message.errorInfo.code}</div>}
+                      {message.errorInfo.status && <div>HTTP状态: {message.errorInfo.status}</div>}
+                      {message.errorInfo.node_id && <div>节点ID: {message.errorInfo.node_id}</div>}
+                      {message.errorInfo.workflow_run_id && <div>工作流ID: {message.errorInfo.workflow_run_id}</div>}
+                    </div>
+                  </details>
+                )}
+              </div>
             )}
             
             {/* 显示建议选项 */}
