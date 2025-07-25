@@ -80,12 +80,31 @@ cd 浩流简历编辑器
 
 1. **启动服务**
 ```bash
-./start.sh
+# 使用归档的启动脚本
+./archive_scripts/start.sh
 ```
 
 2. **访问应用**
 - 前端界面: http://localhost:3000
 - 后端API: http://localhost:8080
+
+## 📁 项目结构
+
+详细的项目文件组织结构请参考：[项目结构文档](docs/development/project-structure.md)
+
+```
+浩流简历编辑器/
+├── 📋 README.md                    # 项目主要文档
+├── 📋 CLAUDE.md                    # Claude 开发指导文档
+├── 📁 docs/                       # 📚 完整文档
+├── 📁 backend/                    # 🐍 Python 后端
+├── 📁 frontend/                   # ⚛️ React 前端
+├── 📁 scripts/                   # 🔧 项目脚本
+├── 📁 tests/                     # 🧪 测试文件
+├── 📁 assets/                    # 📦 静态资源
+├── 📁 logs/                      # 📋 日志文件
+└── 📁 temp/                      # 🗂️ 临时文件
+```
 
 ### ⚙️ 手动部署（开发环境）
 
