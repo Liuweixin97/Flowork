@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Send, MessageCircle, User, Bot, Loader2, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { chatflowAPI } from '../utils/api';
@@ -375,9 +376,9 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
   };
   
   if (!isOpen) return null;
-  
-  return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-blue-900/20 via-slate-900/40 to-indigo-900/30 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-fadeIn">
+
+  const modalContent = (
+    <div className="fixed top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-blue-900/20 via-slate-900/40 to-indigo-900/30 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" style={{ zIndex: 999999 }}>
       <div className="bg-white rounded-xl w-full max-w-2xl h-[600px] flex flex-col shadow-2xl border border-gray-200/50 animate-slideUp backdrop-blur-xl">
         {/* 头部 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200/60 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-t-xl">
@@ -506,6 +507,9 @@ const ChatflowDialog = ({ isOpen, onClose, onResumeGenerated }) => {
       </div>
     </div>
   );
+
+  // 使用 Portal 将弹窗渲染到 document.body，确保在最高层级
+  return createPortal(modalContent, document.body);
 };
 
 export default ChatflowDialog;
