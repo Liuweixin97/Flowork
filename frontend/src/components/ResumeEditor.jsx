@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Download, ArrowLeft, Eye, EyeOff, RefreshCw, ChevronDown } from 'lucide-react';
+import { Save, Download, ArrowLeft, Eye, EyeOff, RefreshCw, ChevronDown, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { resumeAPI } from '../utils/api';
 import { formatDate, downloadFile, debounce } from '../utils/helpers';
 import toast from 'react-hot-toast';
+import ChatflowDialog from './ChatflowDialog';
 
 const ResumeEditor = () => {
   const { id } = useParams();
@@ -20,6 +21,7 @@ const ResumeEditor = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showChatflowDialog, setShowChatflowDialog] = useState(false);
   
   const exportMenuRef = useRef(null);
   
@@ -121,21 +123,27 @@ const ResumeEditor = () => {
     }
   };
   
-  const handleDownloadPDF = async (smartOnepage = false) => {
+  const handleDownloadPDF = async (smartOnepage = false, useHTML = false) => {
     try {
       setDownloading(true);
       setShowExportMenu(false);
       
-      const response = await resumeAPI.exportPDF(id, smartOnepage);
-      const suffix = smartOnepage ? '_智能一页' : '';
-      const filename = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}${suffix}.pdf`;
+      const response = useHTML 
+        ? await resumeAPI.exportPDFHTML(id, smartOnepage)
+        : await resumeAPI.exportPDF(id, smartOnepage);
+      
+      const methodSuffix = useHTML ? '_HTML渲染' : '';
+      const onepageSuffix = smartOnepage ? '_智能一页' : '';
+      const filename = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}${methodSuffix}${onepageSuffix}.pdf`;
       downloadFile(response.data, filename);
       
-      const successMsg = smartOnepage ? 'PDF智能一页导出成功' : 'PDF导出成功';
+      const methodDesc = useHTML ? 'HTML渲染' : '传统';
+      const onepageDesc = smartOnepage ? '智能一页' : '';
+      const successMsg = `PDF${onepageDesc}导出成功 (${methodDesc}方式)`;
       toast.success(successMsg);
     } catch (error) {
       console.error('PDF导出失败:', error);
-      toast.error('PDF导出失败');
+      toast.error(`PDF导出失败: ${error.response?.data?.error || error.message}`);
     } finally {
       setDownloading(false);
     }
@@ -148,6 +156,32 @@ const ResumeEditor = () => {
       }
     } else {
       navigate('/');
+    }
+  };
+  
+  const handleResumeGenerated = (generatedResume) => {
+    try {
+      // 如果有简历ID，直接跳转到编辑页面
+      if (generatedResume.resumeId) {
+        navigate(`/edit/${generatedResume.resumeId}`);
+        toast.success('简历已创建，正在跳转到编辑页面');
+        return;
+      }
+      
+      // 如果有简历内容，更新当前编辑器
+      if (generatedResume.content) {
+        const newMarkdown = generatedResume.content.markdown || generatedResume.content;
+        const newTitle = generatedResume.content.title || '浩流简历生成的简历';
+        
+        setMarkdown(newMarkdown);
+        setTitle(newTitle);
+        setHasUnsavedChanges(true);
+        
+        toast.success('简历内容已导入编辑器，请预览并调整');
+      }
+    } catch (error) {
+      console.error('处理生成的简历失败:', error);
+      toast.error('简历内容导入失败');
     }
   };
   
@@ -209,6 +243,14 @@ const ResumeEditor = () => {
             )}
             
             <button
+              onClick={() => setShowChatflowDialog(true)}
+              className="flex items-center space-x-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+            >
+              <Bot className="h-4 w-4" />
+              <span>浩流简历</span>
+            </button>
+            
+            <button
               onClick={() => setShowPreview(!showPreview)}
               className="flex items-center space-x-1 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
             >
@@ -245,26 +287,48 @@ const ResumeEditor = () => {
               </button>
               
               {showExportMenu && !downloading && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                   <div className="py-1">
+                    <div className="px-4 py-2 text-xs text-gray-500 font-medium uppercase tracking-wide border-b border-gray-100">
+                      传统PDF导出 (ReportLab)
+                    </div>
                     <button
-                      onClick={() => handleDownloadPDF(false)}
+                      onClick={() => handleDownloadPDF(false, false)}
                       className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       普通PDF导出
                     </button>
                     <button
-                      onClick={() => handleDownloadPDF(true)}
+                      onClick={() => handleDownloadPDF(true, false)}
                       className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       智能一页导出
                     </button>
+                    
+                    <div className="px-4 py-2 text-xs text-gray-500 font-medium uppercase tracking-wide border-b border-gray-100 border-t border-gray-100">
+                      HTML渲染导出 (推荐)
+                    </div>
+                    <button
+                      onClick={() => handleDownloadPDF(false, true)}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      HTML普通导出
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPDF(true, true)}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      HTML智能一页导出
+                    </button>
                   </div>
                   <div className="border-t border-gray-100 px-4 py-2">
                     <p className="text-xs text-gray-500">
-                      智能一页：自动调整字号和间距，确保内容适合一页A4纸
+                      • 智能一页：自动调整字号和间距，确保内容适合一页A4纸<br/>
+                      • HTML渲染：更好的格式兼容性，解决段落丢失问题
                     </p>
                   </div>
                 </div>
@@ -299,8 +363,8 @@ const ResumeEditor = () => {
               <h3 className="text-sm font-medium text-gray-700">实时预览</h3>
             </div>
             <div className="p-6 overflow-auto" style={{ maxHeight: '600px' }}>
-              <div className="markdown-preview">
-                <ReactMarkdown>{markdown || '预览区域将显示Markdown渲染后的内容...'}</ReactMarkdown>
+              <div className="markdown-content">
+                <ReactMarkdown>{markdown || '预览区域将显示浩流简历渲染后的内容...'}</ReactMarkdown>
               </div>
             </div>
           </div>
@@ -317,6 +381,13 @@ const ResumeEditor = () => {
           <li>• 使用右侧预览查看最终效果</li>
         </ul>
       </div>
+      
+      {/* Chatflow Dialog */}
+      <ChatflowDialog 
+        isOpen={showChatflowDialog}
+        onClose={() => setShowChatflowDialog(false)}
+        onResumeGenerated={handleResumeGenerated}
+      />
     </div>
   );
 };

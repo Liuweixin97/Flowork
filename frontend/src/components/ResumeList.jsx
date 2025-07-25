@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Edit3, Download, Trash2, Eye, FileText, Clock, CheckSquare, Square, Plus } from 'lucide-react';
+import { Edit3, Download, Trash2, Eye, FileText, Clock, CheckSquare, Square, Plus, Bot } from 'lucide-react';
 import { resumeAPI } from '../utils/api';
 import { formatRelativeTime, downloadFile, truncate, cleanMarkdown } from '../utils/helpers';
+import { useAuth } from '../contexts/AuthContext';
 import EmptyState from './EmptyState';
+// ChatflowDialog moved to HomePage
 import toast from 'react-hot-toast';
 
 const ResumeList = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(null);
@@ -15,6 +18,7 @@ const ResumeList = () => {
   const [createLoading, setCreateLoading] = useState(false);
   const [selectedResumes, setSelectedResumes] = useState(new Set());
   const [batchDeleteLoading, setBatchDeleteLoading] = useState(false);
+  // Chatflow dialog moved to HomePage
   
   useEffect(() => {
     loadResumes();
@@ -116,52 +120,100 @@ const ResumeList = () => {
   };
 
   const handleCreateNewResume = async () => {
+    // 检查用户是否已登录
+    if (!isAuthenticated) {
+      toast.error('请先登录后再创建简历', {
+        duration: 4000,
+      });
+      // 跳转到登录页面
+      navigate('/login', { 
+        state: { 
+          from: { pathname: '/' },
+          message: '登录后即可创建简历'
+        } 
+      });
+      return;
+    }
+
     try {
       setCreateLoading(true);
       
-      // 创建空白简历的默认内容
-      const defaultMarkdown = `# 我的简历
+      // 创建带有示例信息的简历模板
+      const defaultMarkdown = `# 张三的简历
 
 ## 个人信息
-- 姓名: 
-- 邮箱: 
-- 电话: 
-- 地址: 
+- **姓名**: 张三
+- **邮箱**: zhangsan@example.com
+- **电话**: 138-0000-0000
+- **地址**: 北京市朝阳区
+- **GitHub**: https://github.com/zhangsan
+- **LinkedIn**: https://linkedin.com/in/zhangsan
 
 ## 工作经验
 
-### 职位名称 | 公司名称 | 时间期间
-- 工作职责描述
-- 主要成就和贡献
+### 高级前端开发工程师 | ABC科技有限公司 | 2021.03 - 至今
+- 负责公司核心产品的前端架构设计和开发，使用React、TypeScript等技术栈
+- 主导了用户界面重构项目，提升用户体验50%，页面加载速度提升30%
+- 带领3人前端团队，建立代码规范和开发流程，提高团队开发效率
+- 与产品和设计团队紧密合作，确保产品功能的高质量交付
+
+### 前端开发工程师 | XYZ互联网公司 | 2019.07 - 2021.02
+- 参与多个Web应用和移动端H5项目的开发和维护
+- 使用Vue.js、React Native等技术开发跨平台应用
+- 优化前端性能，减少50%的首屏加载时间
+- 协助搭建前端自动化测试和CI/CD流程
 
 ## 教育背景
 
-### 学位 | 学校名称 | 毕业时间
-- 专业相关描述
+### 计算机科学与技术学士 | 清华大学 | 2015.09 - 2019.06
+- **主修课程**: 数据结构、算法设计、软件工程、数据库原理
+- **GPA**: 3.8/4.0
+- **相关活动**: 计算机协会技术部部长，组织多次技术分享活动
 
-## 技能
-- 技能1
-- 技能2
-- 技能3
+## 技能特长
+- **编程语言**: JavaScript/TypeScript, Python, Java
+- **前端技术**: React, Vue.js, Angular, HTML5, CSS3, SASS/LESS
+- **后端技术**: Node.js, Express, Django, Spring Boot
+- **数据库**: MySQL, MongoDB, Redis
+- **工具平台**: Git, Docker, Jenkins, AWS, 微信小程序
 
 ## 项目经验
 
-### 项目名称 | 时间期间
-- 项目描述
-- 技术栈
-- 个人贡献
+### 企业级SaaS管理平台 | 2022.01 - 2022.12
+- **项目描述**: 为中小企业提供一站式管理解决方案的Web平台
+- **技术栈**: React, TypeScript, Ant Design, Node.js, MySQL
+- **个人贡献**: 
+  - 担任前端技术负责人，设计整体前端架构
+  - 开发了可复用的组件库，提高开发效率40%
+  - 实现了复杂的数据可视化功能和实时消息推送
+
+### 移动端电商APP | 2020.06 - 2021.01
+- **项目描述**: 面向年轻用户的社交电商移动应用
+- **技术栈**: React Native, Redux, Node.js, MongoDB
+- **个人贡献**:
+  - 负责商品展示和购物车模块的开发
+  - 优化用户体验，提升转化率15%
+  - 集成第三方支付和物流接口
+
+## 获奖荣誉
+- 2022年度公司"最佳技术创新奖"
+- 2021年"全国大学生程序设计竞赛"二等奖
+- 2020年公司"优秀员工"称号
+
+## 自我评价
+热爱技术，具有强烈的学习能力和责任心。善于团队协作，能够在压力下保持高效工作。对用户体验有深入理解，注重代码质量和项目可维护性。持续关注前端技术发展趋势，乐于分享和交流技术心得。
 `;
 
       const newResumeData = {
-        resume_markdown: defaultMarkdown,
-        title: `新建简历_${new Date().toLocaleDateString()}`
+        raw_markdown: defaultMarkdown,
+        title: `${user?.full_name || user?.username || '我'}的简历_${new Date().toLocaleDateString()}`
       };
 
       const response = await resumeAPI.createResume(newResumeData);
       
       if (response.data.success) {
-        toast.success('空白简历创建成功！');
-        navigate(`/edit/${response.data.resume_id}`);
+        toast.success('简历模板创建成功！');
+        navigate(`/edit/${response.data.resume.id}`);
       } else {
         toast.error('创建简历失败');
       }
@@ -170,6 +222,24 @@ const ResumeList = () => {
       toast.error('创建简历时发生错误');
     } finally {
       setCreateLoading(false);
+    }
+  };
+  
+  const handleResumeGenerated = (generatedResume) => {
+    try {
+      // 如果有简历ID，直接跳转到编辑页面
+      if (generatedResume.resumeId) {
+        navigate(`/edit/${generatedResume.resumeId}`);
+        toast.success('简历已创建，正在跳转到编辑页面');
+        return;
+      }
+      
+      // 刷新列表以显示新创建的简历
+      loadResumes();
+      toast.success('简历创建完成，请在列表中查看');
+    } catch (error) {
+      console.error('处理生成的简历失败:', error);
+      toast.error('简历创建过程出现问题');
     }
   };
   
@@ -183,31 +253,18 @@ const ResumeList = () => {
   }
   
   if (resumes.length === 0) {
-    return <EmptyState onCreateNew={handleCreateNewResume} createLoading={createLoading} />;
+    return (
+      <>
+        <EmptyState 
+          onCreateNew={handleCreateNewResume} 
+          createLoading={createLoading} 
+        />
+      </>
+    );
   }
   
   return (
     <div>
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">我的简历</h2>
-            <p className="text-gray-600 mt-1">管理您从Dify接收的简历</p>
-          </div>
-          <button
-            onClick={handleCreateNewResume}
-            disabled={createLoading}
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
-          >
-            {createLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-            ) : (
-              <Plus className="h-4 w-4 mr-2" />
-            )}
-            新建简历
-          </button>
-        </div>
-      </div>
 
       {/* 多选控制栏 */}
       {resumes.length > 0 && (
@@ -323,6 +380,8 @@ const ResumeList = () => {
           </div>
         ))}
       </div>
+      
+      {/* ChatflowDialog已移至HomePage */}
     </div>
   );
 };

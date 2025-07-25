@@ -106,26 +106,6 @@
   .markdown-content hr {
     @apply border-0 border-t border-gray-300 my-4;
   }
-
-  /* 弹窗动画 */
-  .animate-pulse-scale {
-    animation: pulseScale 0.3s ease-out;
-  }
-  
-  @keyframes pulseScale {
-    0% {
-      transform: scale(0.9);
-      opacity: 0;
-    }
-    50% {
-      transform: scale(1.02);
-      opacity: 0.8;
-    }
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
 }
 
 /* 自定义滚动条 */
