@@ -1,456 +1,297 @@
 # CLAUDE.md
 
-此文件为Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
+此文件为 Claude Code 在此代码库中工作时提供指导。
 
 ## 项目概述
 
-这是一个支持多用户的简历编辑器应用程序，旨在与Dify AI工作流集成。包含以下组成部分：
-- **后端**: Python Flask API，使用SQLAlchemy ORM和JWT认证进行用户管理、简历管理和PDF生成
-- **前端**: React SPA，使用Vite构建系统、Tailwind CSS样式和React Context进行状态管理
-- **认证系统**: 完整的用户注册、登录、权限控制系统，支持多用户数据隔离
-- **集成**: 接收来自Dify HTTP节点的简历数据，并提供可视化编辑界面
+这是一个支持多用户的智能简历编辑器应用程序，专为与 Dify AI 工作流集成而设计。项目采用现代化的前后端分离架构，提供完整的用户认证、简历管理和PDF导出功能。
 
-## 核心架构
+### 核心组成
+- **后端服务**: Python Flask API，使用 SQLAlchemy ORM 和 JWT 认证
+- **前端应用**: React SPA，使用 Vite 构建系统和 Tailwind CSS
+- **认证系统**: 完整的用户注册、登录、权限控制，支持多用户数据隔离
+- **AI集成**: 接收 Dify 工作流数据，提供可视化编辑界面
 
-### 后端结构
-- `app.py`: Flask应用工厂，配置JWT认证、CORS和PostgreSQL/SQLite数据库支持
-- `models.py`: SQLAlchemy模型，包括User和Resume实体，支持用户关联和权限控制
-- `routes/`: 按功能拆分的API蓝图 (resume_routes, auth_routes, debug_routes)  
-- `services/`: 业务逻辑模块 (markdown_parser, pdf_generator, html_pdf_generator, auth_service)
+## 项目架构
 
-### 前端结构
-- React Router设置，包含认证路由: LoginPage (/login), RegisterPage (/register) 和主要功能: HomePage (/) 和 EditPage (/edit/:id)
-- 组件架构: Layout包装器、支持markdown的ResumeEditor、ResumeList、认证组件(LoginForm, RegisterForm)
-- `contexts/AuthContext.jsx`提供全局认证状态管理和JWT token处理
-- `utils/api.js`中的API通信层使用axios，包含认证拦截器
-- 使用Tailwind CSS样式和react-hot-toast通知
+### 后端架构
+```
+backend/
+├── app.py                 # Flask 应用入口，配置 JWT、CORS、数据库
+├── models.py              # SQLAlchemy 数据模型 (User, Resume)
+├── routes/                # API 路由模块
+│   ├── auth_routes.py     # 用户认证相关路由
+│   ├── resume_routes.py   # 简历管理路由
+│   ├── chatflow_routes.py # AI 对话流路由
+│   └── debug_routes.py    # 调试和健康检查
+├── services/              # 业务逻辑服务
+│   ├── auth_service.py    # 认证服务
+│   ├── pdf_generator.py   # PDF 生成服务 (ReportLab)
+│   ├── html_pdf_generator.py # HTML 转 PDF 服务
+│   ├── markdown_parser.py # Markdown 解析服务
+│   └── dify_chatflow_service.py # Dify 对话流集成
+└── requirements.txt       # Python 依赖
+```
 
-### 数据库架构
-- **User模型**: 用户认证和资料管理，包括username, email, password_hash, full_name, is_admin等字段
-- **Resume模型**: 简历数据，包括title, raw_markdown, structured_data (JSON), user_id (外键), is_public等字段
-- 支持PostgreSQL (生产环境) 和SQLite (开发环境)，启动时自动创建表
-- 用户-简历一对多关系，支持数据隔离和权限控制
+### 前端架构
+```
+frontend/
+├── src/
+│   ├── components/        # React 组件
+│   │   ├── auth/         # 认证相关组件
+│   │   ├── ResumeEditor.jsx # 简历编辑器
+│   │   ├── ResumeList.jsx   # 简历列表
+│   │   └── ChatflowDialog.jsx # AI 对话组件
+│   ├── pages/            # 页面组件
+│   │   ├── HomePage.jsx  # 主页
+│   │   ├── EditPage.jsx  # 编辑页面
+│   │   ├── LoginPage.jsx # 登录页面
+│   │   └── RegisterPage.jsx # 注册页面
+│   ├── contexts/         # React Context
+│   │   └── AuthContext.jsx # 全局认证状态
+│   ├── hooks/            # 自定义 Hooks
+│   └── utils/
+│       └── api.js        # API 通信层
+├── package.json          # Node.js 依赖
+└── vite.config.js        # Vite 配置
+```
 
-## 开发命令
+### 数据库设计
+- **User 模型**: 用户认证和资料管理
+  - `id`, `username`, `email`, `password_hash`
+  - `full_name`, `is_admin`, `created_at`
+- **Resume 模型**: 简历数据存储
+  - `id`, `title`, `raw_markdown`, `structured_data`
+  - `user_id` (外键), `is_public`, `created_at`, `updated_at`
+- 支持 PostgreSQL (生产环境) 和 SQLite (开发环境)
 
-### 后端开发
+## 开发工作流
+
+### 环境配置
+
+#### 后端开发环境
 ```bash
 cd backend
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
 
-### 前端开发  
+#### 前端开发环境
 ```bash
 cd frontend
 npm install
 npm run dev          # 开发服务器
 npm run build        # 生产构建
-npm run lint         # ESLint检查
-npm run preview      # 预览构建
+npm run lint         # ESLint 检查
 ```
 
-### Docker部署
+#### 快速启动
 ```bash
+./setup.sh           # 初始化配置
 ./start.sh           # 启动所有服务
 ./stop.sh            # 停止所有服务
-docker-compose logs -f  # 查看日志
 ```
 
-## API集成模式
-
-### Dify集成端点
-- POST `/api/resumes/from-dify` - 接收Dify工作流数据的主要集成点
-- 期望JSON格式: `{"resume_markdown": "...", "title": "..."}`
-- 返回简历ID和编辑URL用于用户重定向
-
-### 用户认证API
-- POST `/api/auth/register` - 用户注册
-- POST `/api/auth/login` - 用户登录
-- POST `/api/auth/logout` - 用户登出
-- POST `/api/auth/refresh` - 刷新JWT token
-- GET `/api/auth/me` - 获取当前用户信息
-- PUT `/api/auth/profile` - 更新用户资料
-- POST `/api/auth/change-password` - 修改密码
-- POST `/api/auth/check-username` - 检查用户名可用性
-- POST `/api/auth/check-email` - 检查邮箱可用性
-
-### 核心CRUD操作 (支持认证和权限控制)
-- GET `/api/resumes` - 列出简历 (认证用户看到自己的+公开的，未认证用户只看公开的)
-- POST `/api/resumes` - 创建简历 (需要认证)
-- GET `/api/resumes/{id}` - 获取特定简历及结构化数据 (基于权限)
-- PUT `/api/resumes/{id}` - 更新简历内容 (需要所有者权限)
-- DELETE `/api/resumes/{id}` - 删除简历 (需要所有者权限)
-- GET `/api/resumes/{id}/pdf` - 导出为PDF (基于访问权限, 支持 `smart_onepage=true` 参数)
-- GET `/api/resumes/{id}/pdf-html` - 使用HTML渲染方式导出PDF (基于访问权限)
-- GET `/api/resumes/{id}/html` - 获取HTML内容用于预览 (基于访问权限)
-
-## 主要依赖
-
-### 后端
-- Flask + Flask-SQLAlchemy + Flask-CORS + Flask-JWT-Extended API层
-- Flask-Bcrypt 用于密码哈希加密
-- reportlab 用于PDF生成，支持HarmonyOS Sans字体
-- python-markdown 用于处理markdown
-- python-dotenv 用于环境配置
-- playwright 用于HTML转PDF (备用方案)
-- email-validator 用于邮箱格式验证
-- psycopg2 用于PostgreSQL连接 (生产环境)
-
-### 前端
-- React 18 配合React Router进行SPA导航
-- Vite作为构建工具，配置ESLint
-- axios HTTP客户端，react-markdown用于渲染
-- lucide-react图标，react-hot-toast通知
-
-## 环境配置
-
-### 后端 (.env)
+#### Docker 部署
+```bash
+./deploy-docker.sh   # 一键 Docker 部署
+./docker-start.sh    # 启动 Docker 服务
+./docker-stop.sh     # 停止 Docker 服务
 ```
+
+### 环境变量配置
+
+#### 后端配置 (backend/.env)
+```bash
+# 应用配置
 SECRET_KEY=your-secret-key
 JWT_SECRET_KEY=your-jwt-secret-key
-DATABASE_URL=sqlite:///resume_editor.db  # 开发环境
-# DATABASE_URL=postgresql://user:pass@localhost/dbname  # 生产环境
 HOST=0.0.0.0
 PORT=8080
+
+# 数据库配置
+DATABASE_URL=sqlite:///resume_editor.db
+# DATABASE_URL=postgresql://user:pass@localhost/dbname
+
+# CORS 配置
 FRONTEND_URL=http://localhost:3000
+
+# Dify 集成配置 (可选)
+DIFY_API_KEY=your_dify_api_key
+DIFY_API_URL=https://api.dify.ai/v1
 ```
 
-### 前端 (.env)
-```
+#### 前端配置 (frontend/.env)
+```bash
+# API 配置
 VITE_API_URL=http://localhost:8080
 ```
 
-## Docker网络设置
+## API 接口规范
 
-- 配置连接到外部`dify_default`网络用于Dify集成
-- 内部`resume_network`用于服务通信
-- 为后端服务配置健康检查
-- SQLite数据库的持久化卷
+### 认证系统 API
+- `POST /api/auth/register` - 用户注册
+- `POST /api/auth/login` - 用户登录 
+- `POST /api/auth/logout` - 用户登出
+- `POST /api/auth/refresh` - 刷新 JWT 令牌
+- `GET /api/auth/me` - 获取当前用户信息
+- `PUT /api/auth/profile` - 更新用户资料
+- `POST /api/auth/change-password` - 修改密码
 
-## 字体配置
+### 简历管理 API
+- `GET /api/resumes` - 获取简历列表 (支持权限过滤)
+- `POST /api/resumes` - 创建新简历 (需要认证)
+- `GET /api/resumes/{id}` - 获取简历详情 (基于权限)
+- `PUT /api/resumes/{id}` - 更新简历 (需要所有者权限)
+- `DELETE /api/resumes/{id}` - 删除简历 (需要所有者权限)
+- `GET /api/resumes/{id}/pdf` - 导出 PDF (支持智能一页)
+- `GET /api/resumes/{id}/pdf-html` - HTML 渲染 PDF 导出
+- `GET /api/resumes/{id}/html` - 获取 HTML 预览
 
-### PDF字体设置
-- 主要字体: HarmonyOS Sans (简体中文)
-- 字体文件位置: `backend/fonts/HarmonyOS Sans/HarmonyOS_Sans_SC/`
-- 支持字重: Regular, Bold, Medium, Light
-- 如果HarmonyOS Sans不可用，自动回退到系统字体
-- 字体注册在服务启动时进行
+### 外部集成 API
+- `POST /api/resumes/from-dify` - Dify 工作流集成入口
 
-### 使用的字体字重
-- NameTitle: Bold字重用于简历姓名/标题
-- SectionTitle: Medium字重用于章节标题
-- JobTitle: Medium字重用于职位/教育标题
-- ModernBodyText: Regular字重用于正文内容
-- ContactInfo: Regular字重用于联系信息
+## 核心功能实现
 
-## 智能一页功能
+### 用户认证系统
+- JWT 令牌认证，支持访问令牌和刷新令牌
+- BCrypt 密码哈希加密
+- 令牌黑名单机制，确保安全登出
+- 基于角色的权限控制 (普通用户/管理员)
 
-### 概述
-智能PDF压缩系统，自动调整字体大小、间距和边距，使简历内容适合单张A4纸，同时保持可读性。
+### PDF 导出引擎
+项目支持双 PDF 引擎：
 
-### 实现细节
-- **内容分析**: `_analyze_content_requirements()` 估算总高度需求
-- **智能压缩**: `_create_optimized_styles()` 在需要时生成缩小的样式
-- **动态调整**: 字体大小最多减少15%，间距减少高达40%
-- **边距优化**: 页面边距必要时减少高达20%
+#### ReportLab 引擎
+- 使用 HarmonyOS Sans 字体，完美支持中文
+- 智能一页压缩算法，自适应字体和间距
+- 支持 Markdown 加粗、斜体格式
 
-### 使用方法
-- 前端: 导出下拉菜单中的"智能一页导出"选项
-- API: 在PDF导出端点添加 `smart_onepage=true` 参数
-- 自动: 系统检测内容是否超过一页并应用优化
+#### HTML 渲染引擎  
+- 使用 Playwright 进行 HTML 转 PDF
+- 解决传统方式段落丢失问题
+- 支持复杂布局和样式
 
-### 算法特性
-- **自适应压缩策略**: 基于内容密度的两级压缩
-  - 标准压缩 (比例 ≥ 0.75): 字体缩放85-95%，间距缩放60-90%
-  - 激进压缩 (比例 < 0.75): 字体缩放75%+，间距缩放45%+
-- **标题特定优化**: 标题元素独立缩放
-  - 姓名标题: 最小18pt字体大小，优化行距
-  - 联系信息: 最小8pt，减少间距
-- **精细元素控制**: 各元素字体大小最小值保证可读性
-  - 正文: 最小8pt，章节标题: 最小12pt
-  - 项目符号: 最小8pt，减少缩进
-- **智能间距减少**: 最多55%间距压缩，同时保持层次结构
-- **增强边距优化**: 基于压缩需求的动态边距减少
+### 智能一页功能
+- 内容分析算法，估算总高度需求
+- 自适应压缩策略，字体大小最多减少 15%
+- 动态间距调整，最多减少 40%
+- 页面边距优化，必要时减少 20%
 
-## HTML转PDF功能 (新增)
+### AI 对话流集成
+- 支持实时流式对话，提升用户体验
+- 自动跳转到编辑页面，无缝衔接
+- 错误处理增强，支持详细错误信息展示
 
-### 概述
-新增的HTML渲染PDF导出功能，解决传统ReportLab方式中的段落丢失问题。
+## 开发规范
 
-### 实现方式
-- **双引擎支持**: 优先使用wkhtmltopdf，回退到Playwright
-- **标准markdown转换**: 使用python-markdown库进行HTML转换
-- **CSS样式优化**: 专为PDF打印优化的CSS样式
-- **智能一页支持**: HTML方式也支持智能一页压缩
+### 代码风格
+- 后端遵循 PEP 8 Python 编码规范
+- 前端使用 ESLint 和 Prettier 格式化
+- 组件使用 JSX 语法，遵循 React 最佳实践
 
-### 新增API端点
-- GET `/api/resumes/{id}/pdf-html` - HTML渲染方式PDF导出
-- GET `/api/resumes/{id}/html` - 获取简历HTML内容
+### 安全要求
+- 所有用户输入必须验证和清理
+- 密码使用 BCrypt 哈希存储
+- API 接口实现适当的权限控制
+- 避免在代码中硬编码敏感信息
 
-### 依赖安装
+### Git 工作流
+- 使用语义化提交消息
+- 功能开发使用分支，通过 PR 合并
+- 发布时打标签，维护版本历史
+
+## 测试和调试
+
+### 测试账户
+- 演示用户: demo@gmail.com / demo123
+- 管理员: admin@gmail.com / admin123
+
+### 调试工具
+- 后端日志: `backend/backend.log`
+- 前端控制台: 浏览器开发者工具
+- API 测试: `tests/test_backend.py`
+
+### 性能监控
+- PDF 生成性能优化
+- 数据库查询优化
+- 前端包大小控制
+
+## 部署指南
+
+### 开发环境
+使用 `./setup.sh` 进行一键配置，支持：
+- 自动依赖检查和安装
+- 环境变量交互式配置
+- 内网穿透配置支持
+
+### 生产环境
+使用 `./deploy-docker.sh` 进行 Docker 部署：
+- 支持 PostgreSQL 数据库
+- 自动 SSL 证书配置
+- 负载均衡和监控
+
+### 内网穿透支持
+- 花生壳、ngrok 等工具支持
+- 自动域名检测和 API 地址切换
+- 无需手动修改配置文件
+
+## 故障排除
+
+### 常见问题
+1. **端口冲突**: 检查 8080 和 3000 端口占用
+2. **数据库连接**: 确认连接字符串和服务状态
+3. **PDF 生成失败**: 检查字体文件和依赖安装
+4. **认证问题**: 验证 JWT 密钥配置
+
+### 日志查看
 ```bash
-# 方案1: 安装Playwright (推荐)
-pip install playwright
-playwright install chromium
+# Docker 部署
+docker-compose logs -f
 
-# 方案2: 安装wkhtmltopdf (macOS上已被禁用)
-# brew install wkhtmltopdf  # 不再可用
+# 传统部署  
+tail -f backend/backend.log
+tail -f frontend/frontend.log
 ```
 
-### 前端集成
-导出菜单分为两个部分：
-- **传统PDF导出 (ReportLab)**: 原有的PDF生成方式
-- **HTML渲染导出 (推荐)**: 新的HTML转PDF方式，更好的格式兼容性
+## 版本管理
 
-## 测试文件
+### 当前版本: v2.1.1
+- 弹窗层级修复和错误处理增强
+- 内网穿透支持优化
+- React Portal 弹窗渲染
+- Dify 错误事件标准处理
 
-项目根目录中的测试脚本：
-- `test_backend.py`, `test_dify_connection.py` - 后端API测试
-- `test_html_pdf.py` - HTML转PDF功能测试
-- `check_status.py`, `service_manager.py` - 服务管理工具
-- 各种针对特定功能验证的手动测试脚本
+### 版本发布流程
+1. 更新版本号和 CHANGELOG
+2. 运行完整测试套件
+3. 构建和验证部署包
+4. 创建 Git 标签和发布
 
-## 版本历史
+## 开发注意事项
 
-### v2.1.1 - 弹窗层级修复和错误处理增强 (2025-07-25)
-- **弹窗问题修复**:
-  - 修复简历创建通知弹窗在对话流界面下方显示的问题
-  - 调整 z-index 层级，确保简历通知弹窗始终在对话流界面顶层显示
-  - 优化弹窗渲染机制，使用React Portal确保正确的DOM层级关系
-- **错误处理增强**:
-  - 基于Dify API文档实现标准错误事件处理 (`event: error`)
-  - 新增工作流节点错误和工作流执行错误的详细处理
-  - 增强错误信息展示，支持HTTP状态码映射和中文错误说明
-  - 添加可展开的技术详情显示，包含任务ID、错误代码等调试信息
-- **内网穿透支持**:
-  - 新增花生壳域名支持 (`23928mq418.vicp.fun`)
-  - 实现动态API URL检测机制，根据访问域名自动选择后端地址
-  - 优化前端配置，支持本地开发和内网穿透的无缝切换
-- **用户体验改进**:
-  - 对话流出错时提供详细错误信息而不是直接卡住
-  - 分层错误显示：用户友好描述 + 可选技术详情
-  - 向后兼容原有错误格式，确保稳定性
-
-### v2.1.0 - 一键启动环境和弹窗优化 (2025-07-25)
-- **新增功能**:
-  - 新增一键启动完整环境脚本 (`一键启动完整环境.sh`)，支持同时启动Dify和简历编辑器前后端服务
-  - 新增停止完整环境脚本 (`停止完整环境.sh`)，统一停止所有服务
-  - 优化简历创建通知弹窗，使用React Portal渲染确保在最高层级显示
-  - 添加弹窗动画效果，提升用户体验
-- **配置更新**:
-  - 更新内网穿透配置，支持新的花生壳域名 (mi3qm328989.vicp.fun)
-  - 修复内网穿透访问时后端服务未运行的配置问题
-  - 优化前端允许的主机配置，支持多种内网穿透工具
-- **用户体验改进**:
-  - 简历创建通知弹窗现在直接在对话流界面顶层显示，而非编辑器下方
-  - 弹窗添加缩放动画和阴影效果，视觉体验更佳
-  - 改进按钮样式，增加悬停效果
-- **技术优化**:
-  - 使用`createPortal`将弹窗渲染到document.body，避免z-index层级问题
-  - 启动脚本增加详细的依赖检查和错误处理
-  - 支持后台运行服务并保存PID文件便于管理
-- **启动方式**:
-  - 一键启动: `./一键启动完整环境.sh`
-  - 原有启动: `python3 manage.py start`
-  - 停止服务: `./停止完整环境.sh` 或 `python3 manage.py stop`
-
-### v2.0.0 - 用户认证系统和多用户支持 (2025-07-23)
-- **重大更新**:
-  - 完整的用户认证系统：注册、登录、登出、密码修改
-  - JWT令牌认证，支持访问令牌和刷新令牌
-  - 用户数据隔离，个人简历管理
-  - 基于角色的权限控制 (普通用户/管理员)
-- **前端功能**:
-  - 现代化登录/注册界面，响应式设计
-  - 实时表单验证 (用户名/邮箱可用性检查)
-  - 认证状态管理和自动令牌刷新
-  - 开发模式快速登录功能 (demo@gmail.com, admin@gmail.com)
-- **用户体验优化**:
-  - 未登录用户友好提示和自动跳转
-  - 丰富的简历模板，包含完整示例内容
-  - 智能跳转，登录后返回原页面
-- **技术架构**:
-  - PostgreSQL生产数据库支持，兼容Heroku等云平台
-  - BCrypt密码哈希，增强安全性
-  - CORS优化，支持ngrok等工具进行生产部署
-  - 令牌黑名单机制，安全登出
-- **API增强**:
-  - 新增完整认证API端点
-  - 简历API增加权限控制和用户隔离
-  - 向后兼容，支持原有Dify集成功能
-
-### v1.3.0 - HTML转PDF优化 (2025-07-23)
-- **新增功能**:
-  - 新增HTML转PDF导出方式，解决段落丢失问题
-  - 支持双PDF引擎：wkhtmltopdf和Playwright
-  - 重新设计的导出菜单，分传统和HTML渲染两种方式
-  - 新增HTML内容预览API端点
-- **技术改进**:
-  - 新增`html_pdf_generator.py`服务
-  - 优化CSS样式适配A4打印
-  - HTML渲染也支持智能一页功能
-- **依赖更新**:
-  - 新增playwright依赖用于HTML转PDF
-
-### v1.2.0 - PDF导出加粗斜体支持 (之前版本)
-- **新增功能**:
-  - PDF导出支持markdown加粗和斜体格式
-  - 改进字体渲染效果
-- **修复问题**:
-  - 修复自动生成测试简历的问题
-  - 优化自动发送消息机制
-
-### v1.1.0 - 智能一页功能 (之前版本)
-- **新增功能**:
-  - 智能一页PDF导出功能
-  - 自适应字体和间距压缩算法
-  - 动态页面边距优化
-- **技术改进**:
-  - 增强PDF生成器压缩策略
-  - 改进内容高度估算算法
-
-### v1.0.0 - 基础版本 (之前版本)
-- **基础功能**:
-  - 简历的创建、编辑、删除
-  - Markdown编辑器和实时预览
-  - PDF导出功能
-  - Dify工作流集成
-- **技术架构**:
-  - Flask后端 + React前端
-  - SQLite数据库
-  - HarmonyOS Sans字体支持
-
-## 用户认证和权限说明
-
-### 开发模式测试账户
-- **演示用户**: demo@gmail.com / demo123 (普通用户权限)
-- **管理员**: admin@gmail.com / admin123 (管理员权限，可查看所有简历)
-
-### 权限控制说明
-- **未认证用户**: 只能查看公开简历，无法创建或编辑
-- **普通用户**: 可以创建、编辑、删除自己的简历，查看自己的和公开的简历
-- **管理员**: 可以查看和管理所有用户的简历
-
-### 安全特性
-- 密码使用BCrypt哈希存储
-- JWT令牌有效期为24小时
-- 支持令牌刷新和黑名单机制
-- 邮箱格式验证和用户名唯一性检查
-- CORS配置支持多域名访问
-
-## Dify完整卸载记录 (2025-07-25)
-
-### 卸载原因
-- PostgreSQL配置文件损坏导致数据库容器持续重启
-- 用户确认数据丢失可接受，要求完整卸载后手动重装
-
-### 卸载操作记录
-
-#### 1. 停止并删除所有Dify容器
-```bash
-cd /Users/liuweixin/Desktop/MyProjects/dify/docker
-docker-compose down -v --remove-orphans
-```
-**结果**: 成功停止并删除了所有Dify相关容器
-
-#### 2. 删除所有Dify相关Docker镜像
-```bash
-# 查找所有Dify镜像
-docker images | grep dify
-
-# 删除找到的镜像
-docker rmi langgenius/dify-web:1.6.0
-docker rmi langgenius/dify-api:1.6.0
-docker rmi langgenius/dify-plugin-daemon:0.1.3-local
-docker rmi langgenius/dify-sandbox:0.2.12
-```
-**结果**: 成功删除所有Dify Docker镜像，释放约2GB磁盘空间
-
-#### 3. 清理Docker系统资源
-```bash
-# 清理未使用的卷
-docker volume prune -f
-
-# 清理未使用的网络
-docker network prune -f
-```
-**结果**: 清理完成，无额外空间回收
-
-#### 4. 删除Dify本地数据文件
-```bash
-# 删除整个volumes目录，包含数据库数据
-rm -rf /Users/liuweixin/Desktop/MyProjects/dify/docker/volumes
-```
-**结果**: 成功删除所有持久化数据，包括：
-- PostgreSQL数据库文件
-- Redis缓存数据
-- 应用配置和用户数据
-- 上传的文件和媒体资源
-
-#### 5. 更新简历编辑器配置
-- 注释掉backend/.env中的Dify API配置
-- 添加"已卸载，需重新配置"说明
-
-### 卸载验证
-```bash
-# 确认没有Dify相关容器
-docker ps -a | grep dify
-# (无输出，确认清理完成)
-
-# 确认没有Dify相关镜像
-docker images | grep dify
-# (无输出，确认清理完成)
-
-# 确认数据目录已删除
-ls -la /Users/liuweixin/Desktop/MyProjects/dify/docker/volumes
-# (目录不存在，确认清理完成)
-```
-
-### 重新安装说明
-如需重新安装Dify，请执行以下步骤：
-
-1. **进入Dify目录**
-   ```bash
-   cd /Users/liuweixin/Desktop/MyProjects/dify/docker
-   ```
-
-2. **检查Docker Compose配置**
-   ```bash
-   # 确认docker-compose.yaml文件完整
-   cat docker-compose.yaml
-   ```
-
-3. **启动Dify服务**
-   ```bash
-   # 拉取最新镜像并启动
-   docker-compose up -d
-   
-   # 查看启动日志
-   docker-compose logs -f
-   ```
-
-4. **等待服务初始化**
-   - 数据库初始化需要1-2分钟
-   - 等待所有容器状态变为healthy
-   - 访问 http://localhost 确认服务可用
-
-5. **重新配置简历编辑器集成**
-   - 在Dify中创建新的应用
-   - 获取新的API Key
-   - 更新backend/.env中的DIFY_API_BASE和DIFY_API_KEY
-   - 取消注释相关配置行
-
-### 注意事项
-- 此次卸载为完全清理，所有Dify数据已永久删除
-- 重新安装后需要重新创建应用和配置API Key
-- 简历编辑器的Dify集成功能在重新配置前将无法使用
-
-## 重要说明
-在进行任何修改时，请遵循以下原则：
-- 总是先阅读现有代码以了解架构和规范
+### 代码修改原则
+- 优先编辑现有文件，避免创建新文件
 - 保持代码风格一致性
-- 优先编辑现有文件而非创建新文件
-- 遵循安全最佳实践，避免暴露密钥和敏感信息
-- 认证相关的修改需要同时考虑前后端的兼容性
-- 新增API端点时要考虑权限控制和数据隔离
+- 遵循现有架构模式
+- 确保向后兼容性
+
+### 数据库迁移
+- 使用 SQLAlchemy 迁移工具
+- 备份生产数据库
+- 测试迁移脚本
+
+### 性能优化
+- 前端代码分割和懒加载
+- 后端数据库查询优化
+- PDF 生成缓存机制
+
+### 安全考虑
+- 定期更新依赖包
+- 输入验证和 SQL 注入防护
+- HTTPS 强制和 CORS 配置
+- 敏感信息环境变量化
+
+这个项目专注于提供专业的简历编辑和管理功能，所有开发工作都应围绕用户体验和系统稳定性展开。
