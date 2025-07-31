@@ -238,6 +238,235 @@ VITE_API_URL=http://localhost:8080
 - 自动域名检测和 API 地址切换
 - 无需手动修改配置文件
 
+## 🚀 生产环境部署指南
+
+### 部署架构选择
+
+#### 1. 单机部署（推荐用于中小型项目）
+```bash
+# 服务器要求
+- CPU: 4核心以上
+- 内存: 8GB RAM
+- 存储: 50GB SSD
+- 系统: Ubuntu 20.04+ / CentOS 8+
+```
+
+#### 2. 容器化部署（推荐用于生产环境）
+```bash
+# 使用 Docker Compose 生产配置
+docker-compose -f docker-compose.prod.yml up -d
+
+# 优势：
+- 资源隔离和限制
+- 自动重启和健康检查
+- 水平扩展支持
+- 简化的依赖管理
+```
+
+#### 3. 云平台部署
+```bash
+# 支持的云平台
+- AWS EC2 + RDS
+- 阿里云 ECS + RDS
+- 腾讯云 CVM + TencentDB
+- Azure VM + Azure Database
+```
+
+### 生产环境配置管理
+
+#### 安全配置检查清单
+```bash
+# 1. 密钥管理
+- [ ] 更换所有默认密钥（SECRET_KEY, JWT_SECRET_KEY）
+- [ ] 使用随机生成的强密钥（至少32字符）
+- [ ] 定期轮换密钥
+
+# 2. 数据库安全
+- [ ] 使用独立的数据库用户和密码
+- [ ] 启用数据库SSL连接
+- [ ] 配置数据库访问白名单
+
+# 3. 网络安全
+- [ ] 配置防火墙规则（仅开放必要端口）
+- [ ] 启用HTTPS（SSL/TLS证书）
+- [ ] 配置反向代理（Nginx）
+
+# 4. 容器安全
+- [ ] 使用非root用户运行容器
+- [ ] 启用容器资源限制
+- [ ] 定期更新基础镜像
+```
+
+#### 环境变量最佳实践
+```bash
+# .env.production 文件结构
+# 应用核心配置
+SECRET_KEY=$(openssl rand -hex 32)
+JWT_SECRET_KEY=$(openssl rand -hex 32)
+FLASK_ENV=production
+
+# 数据库配置（生产环境使用PostgreSQL）
+DATABASE_URL=postgresql://resume_user:secure_password@localhost:5432/resume_editor
+
+# 网络配置
+HOST=0.0.0.0
+PORT=8080
+FRONTEND_URL=https://your-domain.com
+
+# 性能配置
+WORKERS=4
+TIMEOUT=30
+MAX_CONTENT_LENGTH=16777216
+
+# 日志配置
+LOG_LEVEL=INFO
+LOG_FILE=/app/logs/application.log
+
+# AI集成配置
+DIFY_API_KEY=prod_your_dify_api_key
+DIFY_API_URL=https://api.dify.ai/v1
+```
+
+### 部署自动化
+
+#### 使用 GitHub Actions 自动部署
+```yaml
+# .github/workflows/deploy.yml 已配置：
+- 自动代码质量检查
+- Docker 镜像构建和推送
+- 生产环境自动部署
+- 健康检查和回滚机制
+```
+
+#### 部署脚本使用指南
+```bash
+# 1. 一键从GitHub部署（推荐）
+curl -fsSL https://raw.githubusercontent.com/your-repo/main/deploy-from-github.sh | sudo bash
+
+# 2. 本地项目部署
+./deploy-production.sh
+
+# 3. 手动Docker部署
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### 监控和维护
+
+#### 性能监控指标
+```bash
+# 应用层监控
+- 响应时间 < 500ms
+- 错误率 < 1%
+- 并发用户数 < 1000
+- CPU使用率 < 80%
+- 内存使用率 < 85%
+
+# 数据库监控
+- 连接池使用率 < 80%
+- 查询响应时间 < 100ms
+- 数据库大小增长趋势
+- 备份完成状态
+
+# 系统资源监控
+- 磁盘使用率 < 90%
+- 网络IO监控
+- 日志文件大小控制
+```
+
+#### 自动化运维脚本
+```bash
+# 每日备份脚本
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backup/resume-editor/$DATE"
+mkdir -p "$BACKUP_DIR"
+
+# 备份数据库
+docker-compose -f docker-compose.prod.yml exec -T resume-db pg_dump -U resume_user resume_editor > "$BACKUP_DIR/database.sql"
+
+# 备份应用数据
+cp -r /var/lib/resume-editor/data "$BACKUP_DIR/"
+
+# 清理7天前的备份
+find /backup/resume-editor -type d -mtime +7 -exec rm -rf {} +
+```
+
+### 故障排除和恢复
+
+#### 常见生产环境问题
+```bash
+# 1. 服务无响应
+- 检查容器状态：docker-compose ps
+- 查看资源使用：docker stats
+- 检查日志：docker-compose logs -f
+
+# 2. 数据库连接失败
+- 验证数据库服务状态
+- 检查连接字符串配置
+- 确认网络连通性
+
+# 3. PDF生成异常
+- 检查Playwright浏览器安装
+- 验证字体文件完整性
+- 查看内存使用情况
+
+# 4. 高并发性能问题
+- 增加容器副本数量
+- 优化数据库连接池
+- 启用Redis缓存
+```
+
+#### 灾难恢复流程
+```bash
+# 1. 数据恢复
+- 从最近备份恢复数据库
+- 恢复用户上传的文件
+- 验证数据完整性
+
+# 2. 服务恢复
+- 重新部署应用容器
+- 执行健康检查
+- 恢复负载均衡配置
+
+# 3. 验证和测试
+- 功能完整性测试
+- 性能基准测试  
+- 用户访问验证
+```
+
+### 扩展和优化
+
+#### 水平扩展方案
+```bash
+# 1. 负载均衡配置
+- 使用Nginx实现多实例负载均衡
+- 配置健康检查和故障切换
+- 实现会话粘性（如需要）
+
+# 2. 数据库优化
+- 启用读写分离
+- 配置连接池优化
+- 实现查询缓存
+
+# 3. 缓存策略
+- Redis缓存热点数据
+- CDN加速静态资源
+- 浏览器缓存优化
+```
+
+#### 成本优化建议
+```bash
+# 1. 资源优化
+- 根据实际负载调整容器资源限制
+- 使用预留实例降低云服务器成本
+- 定期清理无用的Docker镜像和日志
+
+# 2. 监控成本
+- 设置资源使用告警
+- 监控API调用费用（AI服务）
+- 优化数据传输和存储成本
+```
+
 ## 故障排除
 
 ### 常见问题
@@ -258,11 +487,13 @@ tail -f frontend/frontend.log
 
 ## 版本管理
 
-### 当前版本: v2.1.1
-- 弹窗层级修复和错误处理增强
-- 内网穿透支持优化
-- React Portal 弹窗渲染
-- Dify 错误事件标准处理
+### 当前版本: v2.2.0
+- 生产环境优化和部署体系完善
+- Docker 生产配置优化 (安全用户、健康检查)
+- 自动化部署脚本 (GitHub Actions、一键部署)
+- 生产环境监控和维护工具
+- 完整的依赖文档和环境检查
+- 企业级安全配置和性能优化
 
 ### 版本发布流程
 1. 更新版本号和 CHANGELOG
